@@ -47,3 +47,13 @@ data Type
   deriving (Eq, Show)
 
 type MType = Moded Type
+
+data Env = Env
+  { tenv :: Map.Map Variable MKind
+  , eqenv :: Map.Map Variable Type
+  , venv :: Map.Map Variable MType
+  }
+  deriving (Eq, Show)
+
+data Environmental a = Environmental Env a
+  deriving (Eq, Show)
