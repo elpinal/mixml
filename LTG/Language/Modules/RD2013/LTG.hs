@@ -126,25 +126,21 @@ global :: Int -> Variable
 global = Global
 
 data NameEnv = NameEnv
-  { ntenv :: Map.Map Int T.Text
-  , nvenv :: Map.Map Int T.Text
-  , count :: Int
+  { vdepth :: Int
+  , tdepth :: Int
   }
 
 nameEnv :: NameEnv
 nameEnv = NameEnv
-  { ntenv = mempty
-  , nvenv = mempty
-  , count = 0
+  { vdepth = 0
+  , tdepth = 0
   }
 
-incCount :: NameEnv -> NameEnv
-incCount nenv = nenv { count = count nenv + 1 }
+incValueDepth :: NameEnv -> NameEnv
+incValueDepth nenv = nenv { vdepth = vdepth nenv + 1 }
 
-newTypeVariable :: NameEnv -> NameEnv
-newTypeVariable nenv = (incCount nenv)
-  { ntenv = Map.insert (count nenv) ("t" <> T.pack (show $ count nenv)) $ ntenv nenv
-  }
+incTypeDepth :: NameEnv -> NameEnv
+incTypeDepth nenv = nenv { tdepth = tdepth nenv + 1 }
 
 class PrettyEnv a where
   prettyEnv :: Member (Reader NameEnv) r => Int -> a -> Eff r (Doc ann)
@@ -158,25 +154,29 @@ instance PrettyEnv a => Pretty (Named a) where
 prettyTypeVariable :: Member (Reader NameEnv) r => Variable -> Eff r (Doc ann)
 prettyTypeVariable (Global n)   = return $ "g" <> pretty n
 prettyTypeVariable (Variable n) = do
-  nenv <- asks ntenv
-  c <- asks count
-  return $ maybe ("v" <> brackets (pretty n)) pretty $ Map.lookup (c - n - 1) nenv
+  d <- asks tdepth
+  let m = d - n - 1
+  if m < 0
+    then return $ "v" <> brackets (pretty n)
+    else return $ "t" <> pretty m
 
 prettyVariable :: Member (Reader NameEnv) r => Variable -> Eff r (Doc ann)
 prettyVariable (Global n)   = return $ "g" <> pretty n
 prettyVariable (Variable n) = do
-  nenv <- asks nvenv
-  c <- asks count
-  return $ maybe ("v" <> brackets (pretty n)) pretty $ Map.lookup (c - n - 1) nenv
+  d <- asks vdepth
+  let m = d - n - 1
+  if m < 0
+    then return $ "v" <> brackets (pretty n)
+    else return $ "v" <> pretty m
 
 data Binder
   = Index
   | Bind Int
   deriving (Eq, Show)
 
-prettyTypeBinder :: Member (Reader NameEnv) r => Binder -> Eff r a -> Eff r (Doc ann, a)
-prettyTypeBinder (Bind n) e = (,) <$> prettyTypeVariable (Global n) <*> e
-prettyTypeBinder Index    e = local newTypeVariable $ (,) <$> prettyTypeVariable (Variable 0) <*> e
+prettyTypeBinder :: Member (Reader NameEnv) r => Binder -> Eff r (Doc ann)
+prettyTypeBinder (Bind n) = prettyTypeVariable (Global n)
+prettyTypeBinder Index    = local incTypeDepth $ prettyTypeVariable $ Variable 0
 
 data Type
   = TFun MType MType
@@ -190,8 +190,8 @@ data Type
   deriving (Eq, Show)
 
 prettyBind :: (Member (Reader NameEnv) r, PrettyPrec k, PrettyEnv ty) => Int -> Binder -> k -> ty -> Doc ann -> Eff r (Doc ann)
-prettyBind n b k ty d = fmap (parensWhen $ n >= 4) $ fmap f $ prettyTypeBinder b $ prettyEnv 0 ty
-  where f (x, y) = d <> x <+> ":" <+> pretty (Prec k) <> "." <+> y
+prettyBind n b k ty d = fmap (parensWhen $ n >= 4) $ f <$> prettyTypeBinder b <*> local incTypeDepth (prettyEnv 0 ty)
+  where f x y = d <> x <+> ":" <+> pretty (Prec k) <> "." <+> y
 
 instance PrettyEnv Type where
   prettyEnv n (TFun ty1 ty2) = fmap (parensWhen $ n >= 4) $ f <$> prettyEnv 4 ty1 <*> prettyEnv 3 ty2
