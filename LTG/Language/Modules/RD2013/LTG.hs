@@ -252,6 +252,7 @@ data Term
   | NewIn Binder Kind Term
   | NewInN [(Binder, Kind)] Term
   | DefIn Type Type Term MType
+  | DefInN [(Type, Type)] Term MType
   | Proj Term Label
   | Restrict Term (Set.Set Label)
   deriving (Eq, Show)
@@ -301,6 +302,9 @@ instance PrettyEnv Term where
       f (b, k) = toVariable b >>= prettyTypeVariable >>= \x -> return $ hsep [x, ":", pretty $ Prec k]
       nn = countIndex $ fst <$> xs
   prettyEnv n (DefIn ty1 ty2 t ty3) = fmap (parensWhen $ n >= 4) $ (\w x y z -> hsep ["def", w, ":=", x, "in", y, ":", z]) <$> prettyEnv0 ty1 <*> prettyEnv0 ty2 <*> prettyEnv 9 t <*> prettyEnv0 ty3
+  prettyEnv n (DefInN tys t ty)     = fmap (parensWhen $ n >= 4) $ (\x y z -> hsep ("def" : punctuate semi x ++ ["in", y, ":", z])) <$> mapM f tys <*> prettyEnv 9 t <*> prettyEnv0 ty
+    where
+      f (ty1, ty2) = (\x y -> hsep [x, ":=", y]) <$> prettyEnv0 ty1 <*> prettyEnv0 ty2
   prettyEnv n (Proj t l)            = (\x -> hcat [x, ".", pretty l]) <$> prettyEnv 9 t
   prettyEnv n (Restrict t ls)       = fmap (parensWhen $ n >= 4) $ (\x -> hsep ["restrict", x, "to", prettyList $ Set.toAscList ls]) <$> prettyEnv0 t
 

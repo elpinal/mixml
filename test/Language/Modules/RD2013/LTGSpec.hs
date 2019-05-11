@@ -184,6 +184,10 @@ spec = do
 
       show (pretty $ Named $ DefIn ty1 ty2 t2 $ un ty1) `shouldBe` "def g27 := g40 in (λv0 : v[0]. v0) : g27"
 
+      show (pretty $ Named $ DefInN [] t2 $ un ty1)                       `shouldBe` "def in (λv0 : v[0]. v0) : g27"
+      show (pretty $ Named $ DefInN [(ty1, ty2)] t2 $ un ty1)             `shouldBe` "def g27 := g40 in (λv0 : v[0]. v0) : g27"
+      show (pretty $ Named $ DefInN [(ty1, ty2), (ty2, ty1)] t2 $ un ty1) `shouldBe` "def g27 := g40; g40 := g27 in (λv0 : v[0]. v0) : g27"
+
       show (pretty $ Named $ Proj t "a")               `shouldBe` "g3.a"
       show (pretty $ Named $ Proj (App t t1) "a")      `shouldBe` "(g3 g20).a"
       show (pretty $ Named $ Proj (Proj t "w") "a")    `shouldBe` "g3.w.a"
