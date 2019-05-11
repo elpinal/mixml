@@ -172,6 +172,13 @@ spec = do
       show (pretty $ Named $ App t $ NewIn Index Type t2) `shouldBe` "g3 (new t0 : * in λv0 : t0. v0)"
       show (pretty $ Named $ flip App t $ NewIn Index Type t2) `shouldBe` "(new t0 : * in λv0 : t0. v0) g3"
 
+      show (pretty $ Named $ NewInN [] v)                                     `shouldBe` "new in v[0]"
+      show (pretty $ Named $ NewInN [(Index, Type)] v)                        `shouldBe` "new t0 : * in v[0]"
+      show (pretty $ Named $ NewInN [(Index, Type), (Index, Type ^> Type)] v) `shouldBe` "new t0 : *; t1 : * -> * in v[0]"
+
+      show (pretty $ Named $ NewInN [] $ Abs Index (un $ TVar $ variable 0) v)               `shouldBe` "new in λv0 : v[0]. v0"
+      show (pretty $ Named $ NewInN [(Index, Type)] $ Abs Index (lin $ TVar $ variable 0) v) `shouldBe` "new t0 : * in λv0 : t0@L. v0"
+
       let ty1 = TVar $ global 27
       let ty2 = TVar $ global 40
 

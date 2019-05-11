@@ -196,6 +196,9 @@ ifIndex :: Binder -> (a -> a) -> a -> a
 ifIndex Index f    = f
 ifIndex (Bind _) _ = id
 
+countIndex :: [Binder] -> Int
+countIndex = length . filter isIndex
+
 prettyTypeBinder :: Member (Reader NameEnv) r => Binder -> Eff r (Doc ann)
 prettyTypeBinder (Bind n) = prettyTypeVariable (Global n)
 prettyTypeBinder Index    = local incTypeDepth $ prettyTypeVariable $ Variable 0
@@ -247,6 +250,7 @@ data Term
   | Pack Type Term Type
   | Unpack Binder Binder Term Term
   | NewIn Binder Kind Term
+  | NewInN [(Binder, Kind)] Term
   | DefIn Type Type Term MType
   | Proj Term Label
   | Restrict Term (Set.Set Label)
@@ -262,6 +266,9 @@ prettyBind n b k ty d = fmap (parensWhen $ n >= 4) $ f <$> prettyBinder b <*> pr
 toVariable :: Member (State Int) r => Binder -> Eff r Variable
 toVariable Index    = modify (subtract (1 :: Int)) >> gets variable
 toVariable (Bind n) = return $ global n
+
+ntimes :: Int -> (a -> a) -> a -> a
+ntimes n = appEndo . mtimesDefault n . Endo
 
 instance PrettyEnv Term where
   prettyEnv _ (Var v)       = prettyVariable v
@@ -289,6 +296,10 @@ instance PrettyEnv Term where
   prettyEnv n (Pack ty1 t ty2)      = fmap (parensWhen $ n >= 4) $ (\x y z -> hsep ["pack", angles $ x <> comma <+> y, "as", z]) <$> prettyEnv0 ty1 <*> prettyEnv0 t <*> prettyEnv0 ty2
   prettyEnv n (Unpack b1 b2 t1 t2)  = fmap (parensWhen $ n >= 4) $ (\w x y z -> hsep ["unpack", angles $ w <> comma <+> x, "=", y, "in", z]) <$> prettyTypeBinder b1 <*> prettyBinder b2 <*> prettyEnv0 t1 <*> local (ifIndex b2 incValueDepth . ifIndex b1 incTypeDepth) (prettyEnv0 t2)
   prettyEnv n (NewIn b k t)         = fmap (parensWhen $ n >= 4) $ (\x y z -> hsep ["new", x, ":", y, "in", z]) <$> prettyTypeBinder b <*> prettyEnv0 k <*> local (ifIndex b incTypeDepth) (prettyEnv0 t)
+  prettyEnv n (NewInN xs t)         = fmap (parensWhen $ n >= 4) $ local (ntimes nn incTypeDepth) $ (\x y -> hsep ("new" : punctuate semi x ++ ["in", y])) <$> evalState nn (mapM f xs) <*> prettyEnv0 t
+    where
+      f (b, k) = toVariable b >>= prettyTypeVariable >>= \x -> return $ hsep [x, ":", pretty $ Prec k]
+      nn = countIndex $ fst <$> xs
   prettyEnv n (DefIn ty1 ty2 t ty3) = fmap (parensWhen $ n >= 4) $ (\w x y z -> hsep ["def", w, ":=", x, "in", y, ":", z]) <$> prettyEnv0 ty1 <*> prettyEnv0 ty2 <*> prettyEnv 9 t <*> prettyEnv0 ty3
   prettyEnv n (Proj t l)            = (\x -> hcat [x, ".", pretty l]) <$> prettyEnv 9 t
   prettyEnv n (Restrict t ls)       = fmap (parensWhen $ n >= 4) $ (\x -> hsep ["restrict", x, "to", prettyList $ Set.toAscList ls]) <$> prettyEnv0 t
