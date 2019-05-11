@@ -276,17 +276,17 @@ instance PrettyEnv Term where
   prettyEnv n (App t1 t2)   = fmap (parensWhen $ n >= 5) $ liftM2 (<+>) (prettyEnv 4 t1) (prettyEnv 5 t2)
   prettyEnv n (TmRecord r)  = prettyEnv n r
   prettyEnv n (Let r t1 t2) = do
-    let nn = length . filter isIndex $ snd <$> toList r
-    let f (l, b) = local (appEndo $ mtimesDefault nn $ Endo incValueDepth) $ toVariable b >>= prettyVariable >>= \x -> return (hsep [pretty l, "=", x])
+    let nn = countIndex $ snd <$> toList r
+    let f (l, b) = local (ntimes nn incValueDepth) $ toVariable b >>= prettyVariable >>= \x -> return (hsep [pretty l, "=", x])
     d <- hsep . punctuate semi <$> evalState nn (sequence $ f <$> toList r)
     d1 <- prettyEnv0 t1
-    d2 <- local (appEndo $ mtimesDefault nn $ Endo incValueDepth) $ prettyEnv0 t2
+    d2 <- local (ntimes nn incValueDepth) $ prettyEnv0 t2
     return $ parensWhen (n >= 4) $ hsep ["let", braces d, "=", d1, "in", d2]
   prettyEnv n (LetN xs t) = do
-    let nn = length . filter isIndex $ fst <$> xs
-    let f (b, t) = (\x y -> hsep [x, "=", y]) <$> (toVariable b >>= local (appEndo $ mtimesDefault nn $ Endo incValueDepth) . prettyVariable) <*> prettyEnv0 t
+    let nn = countIndex $ fst <$> xs
+    let f (b, t) = (\x y -> hsep [x, "=", y]) <$> (toVariable b >>= local (ntimes nn incValueDepth) . prettyVariable) <*> prettyEnv0 t
     ds <- evalState nn $ mapM f xs
-    z <- local (appEndo $ mtimesDefault nn $ Endo incValueDepth) $ prettyEnv0 t
+    z <- local (ntimes nn incValueDepth) $ prettyEnv0 t
     return $ parensWhen (n >= 4) $ hsep ("let" : (punctuate semi ds ++ ["in", z]))
   prettyEnv n (New ty)              = parensWhen (n >= 4) . ("new" <+>) <$> prettyEnv 9 ty
   prettyEnv n (Def t1 t2)           = (\x y -> parensWhen (n >= 4) $ hsep ["def", x, ":=", y]) <$> prettyEnv0 t1 <*> prettyEnv0 t2
