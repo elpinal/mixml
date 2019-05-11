@@ -114,6 +114,16 @@ spec = do
       show (pretty $ Named $ Let [("xy", Index), ("xyz", Bind 5), ("B", Index)] (Var $ global 1) $ Var $ variable 1) `shouldBe` "let {B = v0; xy = v1; xyz = g5} = g1 in v0"
       show (pretty $ Named $ Let [("xy", Index), ("xyz", Bind 5), ("z", Index)] (Var $ global 1) $ Var $ variable 1) `shouldBe` "let {xy = v0; xyz = g5; z = v1} = g1 in v0"
 
+      show (pretty $ Named $ LetN [] $ Var $ global 33)                                                    `shouldBe` "let in g33"
+      show (pretty $ Named $ LetN [(Index, Var $ global 7)] $ Var $ global 33)                             `shouldBe` "let v0 = g7 in g33"
+      show (pretty $ Named $ LetN [(Index, Var $ global 7), (Index, Var $ global 8)] $ Var $ global 33)    `shouldBe` "let v0 = g7; v1 = g8 in g33"
+      show (pretty $ Named $ LetN [(Bind 9, Var $ global 7), (Index, Var $ global 8)] $ Var $ variable 0)  `shouldBe` "let g9 = g7; v0 = g8 in v0"
+      show (pretty $ Named $ LetN [(Bind 9, Var $ global 7), (Index, Var $ global 8)] $ Var $ variable 1)  `shouldBe` "let g9 = g7; v0 = g8 in v[1]"
+      show (pretty $ Named $ LetN [(Bind 9, Var $ global 7), (Bind 1, Var $ global 8)] $ Var $ variable 0) `shouldBe` "let g9 = g7; g1 = g8 in v[0]"
+
+      show (pretty $ Named $ LetN [(Bind 9, Var $ global 7), (Index, Var $ variable 0), (Bind 1, Var $ global 8)] $ Var $ variable 0)  `shouldBe` "let g9 = g7; v0 = v[0]; g1 = g8 in v0"
+      show (pretty $ Named $ LetN [(Bind 9, Var $ global 7), (Index, Var $ variable 0), (Index, Var $ variable 0)] $ Var $ variable 0) `shouldBe` "let g9 = g7; v0 = v[0]; v1 = v[0] in v1"
+
       show (pretty $ Named $ New $ TVar $ global 6)               `shouldBe` "new g6"
       show (pretty $ Named $ App t $ New $ TVar $ global 6)       `shouldBe` "g3 (new g6)"
       show (pretty $ Named $ App (New $ TVar $ global 6) t)       `shouldBe` "(new g6) g3"

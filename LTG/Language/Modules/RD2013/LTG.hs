@@ -236,6 +236,7 @@ data Term
   | App Term Term
   | TmRecord (Record Term)
   | Let (Record Binder) Term Term
+  | LetN [(Binder, Term)] Term
   | New Type
   | Def Term Term
   | Read Term
@@ -267,6 +268,12 @@ instance PrettyEnv Term where
     d1 <- prettyEnv0 t1
     d2 <- local (appEndo $ mtimesDefault nn $ Endo incValueDepth) $ prettyEnv0 t2
     return $ parensWhen (n >= 4) $ hsep ["let", braces d, "=", d1, "in", d2]
+  prettyEnv n (LetN xs t) = do
+    let nn = length . filter isIndex $ fst <$> xs
+    let f (b, t) = (\x y -> hsep [x, "=", y]) <$> (toVariable b >>= local (appEndo $ mtimesDefault nn $ Endo incValueDepth) . prettyVariable) <*> prettyEnv0 t
+    ds <- evalState nn $ mapM f xs
+    z <- local (appEndo $ mtimesDefault nn $ Endo incValueDepth) $ prettyEnv0 t
+    return $ parensWhen (n >= 4) $ hsep ("let" : (punctuate semi ds ++ ["in", z]))
   prettyEnv n (New ty)              = parensWhen (n >= 4) . ("new" <+>) <$> prettyEnv 9 ty
   prettyEnv n (Def t1 t2)           = (\x y -> parensWhen (n >= 4) $ hsep ["def", x, ":=", y]) <$> prettyEnv0 t1 <*> prettyEnv0 t2
   prettyEnv n (Read t)              = parensWhen (n >= 9) . ("!" <>) <$> prettyEnv 9 t
