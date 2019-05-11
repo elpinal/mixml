@@ -176,3 +176,8 @@ spec = do
       let ty2 = TVar $ global 40
 
       show (pretty $ Named $ DefIn ty1 ty2 t2 $ un ty1) `shouldBe` "def g27 := g40 in (λv0 : v[0]. v0) : g27"
+
+      show (pretty $ Named $ Restrict t [])                      `shouldBe` "restrict g3 to []"
+      show (pretty $ Named $ Restrict t ["a"])                   `shouldBe` "restrict g3 to [a]"
+      show (pretty $ Named $ Restrict t ["a", "z", "k"])         `shouldBe` "restrict g3 to [a, k, z]"
+      show (pretty $ Named $ Restrict (App t t) ["a", "z", "k"]) `shouldBe` "restrict g3 g3 to [a, k, z]"

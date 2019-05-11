@@ -44,6 +44,7 @@ import Control.Monad.Freer.State
 import qualified Data.Map.Strict as Map
 import Data.Monoid
 import Data.Semigroup
+import qualified Data.Set as Set
 import Data.String
 import qualified Data.Text as T
 import Data.Text.Prettyprint.Doc
@@ -247,6 +248,7 @@ data Term
   | Unpack Binder Binder Term Term
   | NewIn Binder Kind Term
   | DefIn Type Type Term MType
+  | Restrict Term (Set.Set Label)
   deriving (Eq, Show)
 
 seq_ :: Term -> Term -> Term
@@ -287,6 +289,7 @@ instance PrettyEnv Term where
   prettyEnv n (Unpack b1 b2 t1 t2)  = fmap (parensWhen $ n >= 4) $ (\w x y z -> hsep ["unpack", angles $ w <> comma <+> x, "=", y, "in", z]) <$> prettyTypeBinder b1 <*> prettyBinder b2 <*> prettyEnv0 t1 <*> local (ifIndex b2 incValueDepth . ifIndex b1 incTypeDepth) (prettyEnv0 t2)
   prettyEnv n (NewIn b k t)         = fmap (parensWhen $ n >= 4) $ (\x y z -> hsep ["new", x, ":", y, "in", z]) <$> prettyTypeBinder b <*> prettyEnv0 k <*> local (ifIndex b incTypeDepth) (prettyEnv0 t)
   prettyEnv n (DefIn ty1 ty2 t ty3) = fmap (parensWhen $ n >= 4) $ (\w x y z -> hsep ["def", w, ":=", x, "in", y, ":", z]) <$> prettyEnv0 ty1 <*> prettyEnv0 ty2 <*> prettyEnv 9 t <*> prettyEnv0 ty3
+  prettyEnv n (Restrict t ls)       = fmap (parensWhen $ n >= 4) $ (\x -> hsep ["restrict", x, "to", prettyList $ Set.toAscList ls]) <$> prettyEnv0 t
 
 data Env = Env
   { tenv :: Map.Map Variable MKind
