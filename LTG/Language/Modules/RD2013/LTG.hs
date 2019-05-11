@@ -30,6 +30,7 @@ module Language.Modules.RD2013.LTG
 
   -- * Terms
   , Term(..)
+  , seq_
 
   -- * Pretty-printing
   , Prec(..)
@@ -247,6 +248,9 @@ data Term
   | NewIn Binder Kind Term
   | DefIn Type Type Term MType
   deriving (Eq, Show)
+
+seq_ :: Term -> Term -> Term
+seq_ t1 t2 = Let [] t1 t2
 
 prettyBind :: (Member (Reader NameEnv) r, PrettyEnv k, PrettyEnv ty) => Int -> Binder -> k -> ty -> Doc ann -> Eff r (Doc ann)
 prettyBind n b k ty d = fmap (parensWhen $ n >= 4) $ f <$> prettyBinder b <*> prettyEnv0 k <*> local (ifIndex b incValueDepth) (prettyEnv0 ty)
