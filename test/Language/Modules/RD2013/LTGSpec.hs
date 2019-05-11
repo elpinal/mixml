@@ -177,6 +177,12 @@ spec = do
 
       show (pretty $ Named $ DefIn ty1 ty2 t2 $ un ty1) `shouldBe` "def g27 := g40 in (λv0 : v[0]. v0) : g27"
 
+      show (pretty $ Named $ Proj t "a")               `shouldBe` "g3.a"
+      show (pretty $ Named $ Proj (App t t1) "a")      `shouldBe` "(g3 g20).a"
+      show (pretty $ Named $ Proj (Proj t "w") "a")    `shouldBe` "g3.w.a"
+      show (pretty $ Named $ App t1 $ Proj t "w")      `shouldBe` "g20 g3.w"
+      show (pretty $ Named $ flip App t1 $ Proj t "w") `shouldBe` "g3.w g20"
+
       show (pretty $ Named $ Restrict t [])                      `shouldBe` "restrict g3 to []"
       show (pretty $ Named $ Restrict t ["a"])                   `shouldBe` "restrict g3 to [a]"
       show (pretty $ Named $ Restrict t ["a", "z", "k"])         `shouldBe` "restrict g3 to [a, k, z]"
