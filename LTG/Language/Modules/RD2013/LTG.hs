@@ -271,6 +271,9 @@ toVariable (Bind n) = return $ global n
 ntimes :: Int -> (a -> a) -> a -> a
 ntimes n = appEndo . mtimesDefault n . Endo
 
+lineAlt :: Doc ann
+lineAlt = flatAlt hardline space
+
 instance PrettyEnv Term where
   prettyEnv _ (Var v)       = prettyVariable v
   prettyEnv n (Abs b ty t)  = prettyBind n b ty t "λ"
@@ -295,7 +298,7 @@ instance PrettyEnv Term where
   prettyEnv n (Poly b k t)          = prettyTypeBind n b k t "Λ"
   prettyEnv n (Inst t ty)           = fmap (parensWhen $ n >= 5) $ liftM2 (<+>) (prettyEnv 4 t) (brackets <$> prettyEnv0 ty)
   prettyEnv n (Pack ty1 t ty2)      = fmap (parensWhen $ n >= 4) $ (\x y z -> hsep ["pack", angles $ x <> comma <+> y, "as", z]) <$> prettyEnv0 ty1 <*> prettyEnv0 t <*> prettyEnv0 ty2
-  prettyEnv n (Unpack b1 b2 t1 t2)  = fmap (parensWhen $ n >= 4) $ (\w x y z -> hsep ["unpack", angles $ w <> comma <+> x, "=", y, "in" <> softline <> z]) <$> prettyTypeBinder b1 <*> prettyBinder b2 <*> prettyEnv0 t1 <*> local (ifIndex b2 incValueDepth . ifIndex b1 incTypeDepth) (prettyEnv0 t2)
+  prettyEnv n (Unpack b1 b2 t1 t2)  = fmap (parensWhen $ n >= 4) $ (\w x y z -> align $ group (hsep ["unpack", angles $ w <> comma <+> x, nest 2 ("=" <> lineAlt <> y) <> lineAlt <> "in" <> lineAlt]) <> softline' <> z) <$> prettyTypeBinder b1 <*> prettyBinder b2 <*> prettyEnv0 t1 <*> local (ifIndex b2 incValueDepth . ifIndex b1 incTypeDepth) (prettyEnv0 t2)
   prettyEnv n (NewIn b k t)         = fmap (parensWhen $ n >= 4) $ (\x y z -> hsep ["new", x, ":", y, "in" <> softline <> z]) <$> prettyTypeBinder b <*> prettyEnv0 k <*> local (ifIndex b incTypeDepth) (prettyEnv0 t)
   prettyEnv n (NewInN xs t)         = fmap (parensWhen $ n >= 4) $ local (ntimes nn incTypeDepth) $ (\x y -> hsep ("new" : punctuate semi x ++ ["in" <> softline <> y])) <$> evalState nn (mapM f xs) <*> prettyEnv0 t
     where
