@@ -282,27 +282,27 @@ instance PrettyEnv Term where
     d <- hsep . punctuate semi <$> evalState nn (sequence $ f <$> toList r)
     d1 <- prettyEnv0 t1
     d2 <- local (ntimes nn incValueDepth) $ prettyEnv0 t2
-    return $ parensWhen (n >= 4) $ hsep ["let", braces d, "=", d1, "in", d2]
+    return $ parensWhen (n >= 4) $ hsep ["let", braces d, "=", d1, "in" <> softline <> d2]
   prettyEnv n (LetN xs t) = do
     let nn = countIndex $ fst <$> xs
     let f (b, t) = (\x y -> hsep [x, "=", y]) <$> (toVariable b >>= local (ntimes nn incValueDepth) . prettyVariable) <*> prettyEnv0 t
     ds <- evalState nn $ mapM f xs
     z <- local (ntimes nn incValueDepth) $ prettyEnv0 t
-    return $ parensWhen (n >= 4) $ hsep ("let" : (punctuate semi ds ++ ["in", z]))
+    return $ parensWhen (n >= 4) $ hsep ("let" : (punctuate semi ds ++ ["in" <> softline <> z]))
   prettyEnv n (New ty)              = parensWhen (n >= 4) . ("new" <+>) <$> prettyEnv 9 ty
   prettyEnv n (Def t1 t2)           = (\x y -> parensWhen (n >= 4) $ hsep ["def", x, ":=", y]) <$> prettyEnv0 t1 <*> prettyEnv0 t2
   prettyEnv n (Read t)              = parensWhen (n >= 9) . ("!" <>) <$> prettyEnv 9 t
   prettyEnv n (Poly b k t)          = prettyTypeBind n b k t "Λ"
   prettyEnv n (Inst t ty)           = fmap (parensWhen $ n >= 5) $ liftM2 (<+>) (prettyEnv 4 t) (brackets <$> prettyEnv0 ty)
   prettyEnv n (Pack ty1 t ty2)      = fmap (parensWhen $ n >= 4) $ (\x y z -> hsep ["pack", angles $ x <> comma <+> y, "as", z]) <$> prettyEnv0 ty1 <*> prettyEnv0 t <*> prettyEnv0 ty2
-  prettyEnv n (Unpack b1 b2 t1 t2)  = fmap (parensWhen $ n >= 4) $ (\w x y z -> hsep ["unpack", angles $ w <> comma <+> x, "=", y, "in", z]) <$> prettyTypeBinder b1 <*> prettyBinder b2 <*> prettyEnv0 t1 <*> local (ifIndex b2 incValueDepth . ifIndex b1 incTypeDepth) (prettyEnv0 t2)
-  prettyEnv n (NewIn b k t)         = fmap (parensWhen $ n >= 4) $ (\x y z -> hsep ["new", x, ":", y, "in", z]) <$> prettyTypeBinder b <*> prettyEnv0 k <*> local (ifIndex b incTypeDepth) (prettyEnv0 t)
-  prettyEnv n (NewInN xs t)         = fmap (parensWhen $ n >= 4) $ local (ntimes nn incTypeDepth) $ (\x y -> hsep ("new" : punctuate semi x ++ ["in", y])) <$> evalState nn (mapM f xs) <*> prettyEnv0 t
+  prettyEnv n (Unpack b1 b2 t1 t2)  = fmap (parensWhen $ n >= 4) $ (\w x y z -> hsep ["unpack", angles $ w <> comma <+> x, "=", y, "in" <> softline <> z]) <$> prettyTypeBinder b1 <*> prettyBinder b2 <*> prettyEnv0 t1 <*> local (ifIndex b2 incValueDepth . ifIndex b1 incTypeDepth) (prettyEnv0 t2)
+  prettyEnv n (NewIn b k t)         = fmap (parensWhen $ n >= 4) $ (\x y z -> hsep ["new", x, ":", y, "in" <> softline <> z]) <$> prettyTypeBinder b <*> prettyEnv0 k <*> local (ifIndex b incTypeDepth) (prettyEnv0 t)
+  prettyEnv n (NewInN xs t)         = fmap (parensWhen $ n >= 4) $ local (ntimes nn incTypeDepth) $ (\x y -> hsep ("new" : punctuate semi x ++ ["in" <> softline <> y])) <$> evalState nn (mapM f xs) <*> prettyEnv0 t
     where
       f (b, k) = toVariable b >>= prettyTypeVariable >>= \x -> return $ hsep [x, ":", pretty $ Prec k]
       nn = countIndex $ fst <$> xs
-  prettyEnv n (DefIn ty1 ty2 t ty3) = fmap (parensWhen $ n >= 4) $ (\w x y z -> hsep ["def", w, ":=", x, "in", y, ":", z]) <$> prettyEnv0 ty1 <*> prettyEnv0 ty2 <*> prettyEnv 9 t <*> prettyEnv0 ty3
-  prettyEnv n (DefInN tys t ty)     = fmap (parensWhen $ n >= 4) $ (\x y z -> hsep ("def" : punctuate semi x ++ ["in", y, ":", z])) <$> mapM f tys <*> prettyEnv 9 t <*> prettyEnv0 ty
+  prettyEnv n (DefIn ty1 ty2 t ty3) = fmap (parensWhen $ n >= 4) $ (\w x y z -> hsep ["def", w, ":=", x, "in" <> softline <> y, ":", z]) <$> prettyEnv0 ty1 <*> prettyEnv0 ty2 <*> prettyEnv 9 t <*> prettyEnv0 ty3
+  prettyEnv n (DefInN tys t ty)     = fmap (parensWhen $ n >= 4) $ (\x y z -> hsep ("def" : punctuate semi x ++ ["in" <> softline <> y, ":", z])) <$> mapM f tys <*> prettyEnv 9 t <*> prettyEnv0 ty
     where
       f (ty1, ty2) = (\x y -> hsep [x, ":=", y]) <$> prettyEnv0 ty1 <*> prettyEnv0 ty2
   prettyEnv n (Proj t l)            = (\x -> hcat [x, ".", pretty l]) <$> prettyEnv 9 t
