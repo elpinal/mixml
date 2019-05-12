@@ -301,8 +301,12 @@ instance PrettyEnv Term where
   prettyEnv n (Poly b k t)          = prettyTypeBind n b k t "Λ"
   prettyEnv n (Inst t ty)           = parenF (n >= 5) $ liftM2 (<+>) (prettyEnv 4 t) (brackets <$> prettyEnv0 ty)
   prettyEnv n (Pack ty1 t ty2)      = parenF (n >= 4) $ (\x y z -> hsep ["pack", angles $ x <> comma <+> y, "as", z]) <$> prettyEnv0 ty1 <*> prettyEnv0 t <*> prettyEnv0 ty2
-  prettyEnv n (Unpack b1 b2 t1 t2)  = parenF (n >= 4) $ (\w x y z -> align $ group (hsep ["unpack", angles $ w <> comma <+> x, nest 2 ("=" <> lineAlt <> y) <> lineAlt <> "in" <> lineAlt]) <> softline' <> z) <$> prettyTypeBinder b1 <*> prettyBinder b2 <*> prettyEnv0 t1 <*> local (ifIndex b2 incValueDepth . ifIndex b1 incTypeDepth) (prettyEnv0 t2)
-  prettyEnv n (NewIn b k t)         = parenF (n >= 4) $ (\x y z -> hsep ["new", x, ":", y, "in" <> softline <> z]) <$> prettyTypeBinder b <*> prettyEnv0 k <*> local (ifIndex b incTypeDepth) (prettyEnv0 t)
+  prettyEnv n (Unpack b1 b2 t1 t2)  = parenF (n >= 4) $ f <$> prettyTypeBinder b1 <*> prettyBinder b2 <*> prettyEnv0 t1 <*> local (ifIndex b2 incValueDepth . ifIndex b1 incTypeDepth) (prettyEnv0 t2)
+    where
+      f w x y z = align $ group (hsep ["unpack", angles $ w <> comma <+> x, nest 2 ("=" <> lineAlt <> y) <> lineAlt <> "in" <> lineAlt]) <> softline' <> z
+  prettyEnv n (NewIn b k t)         = parenF (n >= 4) $ f <$> prettyTypeBinder b <*> prettyEnv0 k <*> local (ifIndex b incTypeDepth) (prettyEnv0 t)
+    where
+      f x y z = hsep ["new", x, ":", y, "in" <> softline <> z]
   prettyEnv n (NewInN xs t)         = parenF (n >= 4) $ local (ntimes nn incTypeDepth) $ (\x y -> hsep ("new" : punctuate semi x ++ ["in" <> softline <> y])) <$> evalState nn (mapM f xs) <*> prettyEnv0 t
     where
       f (b, k) = toVariable b >>= prettyTypeVariable >>= \x -> return $ hsep [x, ":", pretty $ Prec k]
