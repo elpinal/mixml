@@ -291,7 +291,7 @@ instance PrettyEnv Term where
     let f (b, t) = (\x y -> hsep [x, "=", y]) <$> (toVariable b >>= local (ntimes nn incValueDepth) . prettyVariable) <*> prettyEnv0 t
     ds <- evalState nn $ mapM f xs
     z <- local (ntimes nn incValueDepth) $ prettyEnv0 t
-    return $ parensWhen (n >= 4) $ hsep ("let" : (punctuate semi ds ++ ["in" <> softline <> z]))
+    return $ parensWhen (n >= 4) $ hsep ("let" : punctuate semi ds) <+> "in" <> softline <> z
   prettyEnv n (New ty)              = parensWhen (n >= 4) . ("new" <+>) <$> prettyEnv 9 ty
   prettyEnv n (Def t1 t2)           = (\x y -> parensWhen (n >= 4) $ hsep ["def", x, ":=", y]) <$> prettyEnv0 t1 <*> prettyEnv0 t2
   prettyEnv n (Read t)              = parensWhen (n >= 9) . ("!" <>) <$> prettyEnv 9 t
