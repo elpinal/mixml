@@ -231,7 +231,7 @@ instance PrettyEnv Type where
   prettyEnv n (Ref ty)        = parensWhen (n >= 9) <$> liftM2 (<>) (return "?") (prettyEnv 9 ty)
   prettyEnv _ (TVar v)        = prettyTypeVariable v
   prettyEnv n (TAbs b k ty)   = prettyTypeBind n b k ty "λ"
-  prettyEnv n (TApp ty1 ty2)  = fmap (parensWhen $ n >= 5) $ liftM2 (<+>) (prettyEnv 4 ty1) (prettyEnv 5 ty2)
+  prettyEnv n (TApp ty1 ty2)  = parenF (n >= 5) $ liftM2 (<+>) (prettyEnv 4 ty1) (prettyEnv 5 ty2)
 
 type MType = Moded Type
 
@@ -274,10 +274,13 @@ ntimes n = appEndo . mtimesDefault n . Endo
 lineAlt :: Doc ann
 lineAlt = flatAlt hardline space
 
+parenF :: Functor f => Bool -> f (Doc ann) -> f (Doc ann)
+parenF = fmap . parensWhen
+
 instance PrettyEnv Term where
   prettyEnv _ (Var v)       = prettyVariable v
   prettyEnv n (Abs b ty t)  = prettyBind n b ty t "λ"
-  prettyEnv n (App t1 t2)   = fmap (parensWhen $ n >= 5) $ liftM2 (<+>) (prettyEnv 4 t1) (prettyEnv 5 t2)
+  prettyEnv n (App t1 t2)   = parenF (n >= 5) $ liftM2 (<+>) (prettyEnv 4 t1) (prettyEnv 5 t2)
   prettyEnv n (TmRecord r)  = prettyEnv n r
   prettyEnv n (Let r t1 t2) = do
     let nn = countIndex $ snd <$> toList r
@@ -296,20 +299,20 @@ instance PrettyEnv Term where
   prettyEnv n (Def t1 t2)           = (\x y -> parensWhen (n >= 4) $ hsep ["def", x, ":=", y]) <$> prettyEnv0 t1 <*> prettyEnv0 t2
   prettyEnv n (Read t)              = parensWhen (n >= 9) . ("!" <>) <$> prettyEnv 9 t
   prettyEnv n (Poly b k t)          = prettyTypeBind n b k t "Λ"
-  prettyEnv n (Inst t ty)           = fmap (parensWhen $ n >= 5) $ liftM2 (<+>) (prettyEnv 4 t) (brackets <$> prettyEnv0 ty)
-  prettyEnv n (Pack ty1 t ty2)      = fmap (parensWhen $ n >= 4) $ (\x y z -> hsep ["pack", angles $ x <> comma <+> y, "as", z]) <$> prettyEnv0 ty1 <*> prettyEnv0 t <*> prettyEnv0 ty2
-  prettyEnv n (Unpack b1 b2 t1 t2)  = fmap (parensWhen $ n >= 4) $ (\w x y z -> align $ group (hsep ["unpack", angles $ w <> comma <+> x, nest 2 ("=" <> lineAlt <> y) <> lineAlt <> "in" <> lineAlt]) <> softline' <> z) <$> prettyTypeBinder b1 <*> prettyBinder b2 <*> prettyEnv0 t1 <*> local (ifIndex b2 incValueDepth . ifIndex b1 incTypeDepth) (prettyEnv0 t2)
-  prettyEnv n (NewIn b k t)         = fmap (parensWhen $ n >= 4) $ (\x y z -> hsep ["new", x, ":", y, "in" <> softline <> z]) <$> prettyTypeBinder b <*> prettyEnv0 k <*> local (ifIndex b incTypeDepth) (prettyEnv0 t)
-  prettyEnv n (NewInN xs t)         = fmap (parensWhen $ n >= 4) $ local (ntimes nn incTypeDepth) $ (\x y -> hsep ("new" : punctuate semi x ++ ["in" <> softline <> y])) <$> evalState nn (mapM f xs) <*> prettyEnv0 t
+  prettyEnv n (Inst t ty)           = parenF (n >= 5) $ liftM2 (<+>) (prettyEnv 4 t) (brackets <$> prettyEnv0 ty)
+  prettyEnv n (Pack ty1 t ty2)      = parenF (n >= 4) $ (\x y z -> hsep ["pack", angles $ x <> comma <+> y, "as", z]) <$> prettyEnv0 ty1 <*> prettyEnv0 t <*> prettyEnv0 ty2
+  prettyEnv n (Unpack b1 b2 t1 t2)  = parenF (n >= 4) $ (\w x y z -> align $ group (hsep ["unpack", angles $ w <> comma <+> x, nest 2 ("=" <> lineAlt <> y) <> lineAlt <> "in" <> lineAlt]) <> softline' <> z) <$> prettyTypeBinder b1 <*> prettyBinder b2 <*> prettyEnv0 t1 <*> local (ifIndex b2 incValueDepth . ifIndex b1 incTypeDepth) (prettyEnv0 t2)
+  prettyEnv n (NewIn b k t)         = parenF (n >= 4) $ (\x y z -> hsep ["new", x, ":", y, "in" <> softline <> z]) <$> prettyTypeBinder b <*> prettyEnv0 k <*> local (ifIndex b incTypeDepth) (prettyEnv0 t)
+  prettyEnv n (NewInN xs t)         = parenF (n >= 4) $ local (ntimes nn incTypeDepth) $ (\x y -> hsep ("new" : punctuate semi x ++ ["in" <> softline <> y])) <$> evalState nn (mapM f xs) <*> prettyEnv0 t
     where
       f (b, k) = toVariable b >>= prettyTypeVariable >>= \x -> return $ hsep [x, ":", pretty $ Prec k]
       nn = countIndex $ fst <$> xs
-  prettyEnv n (DefIn ty1 ty2 t ty3) = fmap (parensWhen $ n >= 4) $ (\w x y z -> hsep ["def", w, ":=", x, "in" <> softline <> y, ":", z]) <$> prettyEnv0 ty1 <*> prettyEnv0 ty2 <*> prettyEnv 9 t <*> prettyEnv0 ty3
-  prettyEnv n (DefInN tys t ty)     = fmap (parensWhen $ n >= 4) $ (\x y z -> hsep ("def" : punctuate semi x ++ ["in" <> softline <> y, ":", z])) <$> mapM f tys <*> prettyEnv 9 t <*> prettyEnv0 ty
+  prettyEnv n (DefIn ty1 ty2 t ty3) = parenF (n >= 4) $ (\w x y z -> hsep ["def", w, ":=", x, "in" <> softline <> y, ":", z]) <$> prettyEnv0 ty1 <*> prettyEnv0 ty2 <*> prettyEnv 9 t <*> prettyEnv0 ty3
+  prettyEnv n (DefInN tys t ty)     = parenF (n >= 4) $ (\x y z -> hsep ("def" : punctuate semi x ++ ["in" <> softline <> y, ":", z])) <$> mapM f tys <*> prettyEnv 9 t <*> prettyEnv0 ty
     where
       f (ty1, ty2) = (\x y -> hsep [x, ":=", y]) <$> prettyEnv0 ty1 <*> prettyEnv0 ty2
   prettyEnv n (Proj t l)            = (\x -> hcat [x, ".", pretty l]) <$> prettyEnv 9 t
-  prettyEnv n (Restrict t ls)       = fmap (parensWhen $ n >= 4) $ (\x -> hsep ["restrict", x, "to", prettyList $ Set.toAscList ls]) <$> prettyEnv0 t
+  prettyEnv n (Restrict t ls)       = parenF (n >= 4) $ (\x -> hsep ["restrict", x, "to", prettyList $ Set.toAscList ls]) <$> prettyEnv0 t
 
 data Env = Env
   { tenv :: Map.Map Variable MKind
