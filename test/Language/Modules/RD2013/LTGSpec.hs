@@ -207,5 +207,11 @@ spec = do
 
   describe "kindOf" $ do
     it "computes a kind for a type" $ do
-      computeKind (TVar $ variable 0)                               `shouldBe` Left (UnboundTypeVariable $ variable 0)
-      computeKind (Forall Index (un Type) $ un $ TVar $ variable 0) `shouldBe` return (un Type)
+      computeKind (TVar $ variable 0)                                  `shouldBe` Left (UnboundTypeVariable $ variable 0)
+      computeKind (Forall Index (un Type) $ un $ TVar $ variable 0)    `shouldBe` return (un Type)
+      computeKind (Forall Index (lin Type) $ un $ TVar $ variable 0)   `shouldBe` return (un Type)
+      computeKind (Forall Index (un Type) $ un $ TVar $ variable 1)    `shouldBe` Left (UnboundTypeVariable $ variable 1)
+      computeKind (Forall (Bind 0) (un Type) $ un $ TVar $ variable 0) `shouldBe` Left (UnboundTypeVariable $ variable 0)
+
+      computeKind (Forall Index (lin Type) $ un $ Forall Index (lin $ Type ^> Type) $ un $ TVar $ variable 1) `shouldBe` return (un Type)
+      computeKind (Forall Index (lin Type) $ un $ Forall Index (lin $ Type ^> Type) $ un $ TVar $ variable 0) `shouldBe` Left (UnexpectedHigherKind (Type ^> Type) (TVar $ variable 0) Any)

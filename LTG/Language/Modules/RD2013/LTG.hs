@@ -48,6 +48,9 @@ module Language.Modules.RD2013.LTG
 
   -- * Errors
   , KindError(..)
+
+  -- * Consistency
+  , Consistent(..)
   ) where
 
 import Control.Monad
