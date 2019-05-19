@@ -75,6 +75,7 @@ common all
                      , OverloadedLists
                      , OverloadedStrings
                      , TypeFamilies
+                     , TypeOperators
 
 library ltg
   import:              all

@@ -332,6 +332,9 @@ data TEnv = TEnv
   }
   deriving (Eq, Show)
 
+findLinear :: TEnv -> Set.Set Variable
+findLinear tenv = undefined
+
 data Env = Env
   { tenv :: TEnv
   , eqenv :: Map.Map Variable Type
@@ -348,6 +351,7 @@ data KindError
   | UnusedTypeVariableWithLinearKind Kind
   | EmptyITEnv
   | UnboundTypeVariable Variable
+  | UnusedTypeVariables (Set.Set Variable) TEnv
   deriving (Eq, Show)
 
 type WithTEnvError r = Members '[State TEnv, Error KindError] r
@@ -371,6 +375,14 @@ unType ty = do
 [] !? n       = Nothing
 (x : _) !? 0  = Just x
 (_ : xs) !? n = xs !? (n - 1)
+
+close :: Member (Error KindError) r => TEnv -> Eff (State TEnv ': r) a -> Eff r a
+close tenv e = do
+  (x, tenv) <- runState tenv e
+  let set = findLinear tenv
+  when (not $ Set.null set) $
+    throwError $ UnusedTypeVariables set tenv
+  return x
 
 class Kinded a where
   toType :: a -> Type
