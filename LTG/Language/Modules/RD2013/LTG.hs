@@ -39,8 +39,10 @@ module Language.Modules.RD2013.LTG
 
 import Control.Monad
 import Control.Monad.Freer
+import Control.Monad.Freer.Error
 import Control.Monad.Freer.Reader
 import Control.Monad.Freer.State
+import Data.Functor
 import qualified Data.Map.Strict as Map
 import Data.Monoid
 import Data.Semigroup
@@ -79,6 +81,12 @@ instance PrettyEnv a => PrettyEnv (Moded a) where
   prettyEnv n (Moded Linear x) = do
     d <- prettyEnv 9 x
     return $ d <> "@" <> pretty Linear
+
+toUn :: Moded a -> Moded a
+toUn (Moded _ x) = Moded Unrestricted x
+
+getMode :: Moded a -> Mode
+getMode (Moded m _) = m
 
 newtype Label = Label T.Text
   deriving (Eq, Ord, Show, Pretty, IsString)
@@ -318,8 +326,14 @@ instance PrettyEnv Term where
   prettyEnv n (Proj t l)            = (\x -> hcat [x, ".", pretty l]) <$> prettyEnv 9 t
   prettyEnv n (Restrict t ls)       = parenF (n >= 4) $ (\x -> hsep ["restrict", x, "to", prettyList $ Set.toAscList ls]) <$> prettyEnv0 t
 
+data TEnv = TEnv
+  { gtenv :: Map.Map Int MKind -- Global type environment.
+  , itenv :: [Maybe MKind] -- Indexed type environment.
+  }
+  deriving (Eq, Show)
+
 data Env = Env
-  { tenv :: Map.Map Variable MKind
+  { tenv :: TEnv
   , eqenv :: Map.Map Variable Type
   , venv :: Map.Map Variable MType
   }
@@ -327,3 +341,97 @@ data Env = Env
 
 data Environmental a = Environmental Env a
   deriving (Eq, Show)
+
+data KindError
+  = UnexpectedLinearKind Type TEnv
+  | UnexpectedHigherKind Kind Type TEnv
+  | UnusedTypeVariableWithLinearKind Kind
+  | EmptyITEnv
+  deriving (Eq, Show)
+
+type WithTEnvError r = Members '[State TEnv, Error KindError] r
+
+throw :: WithTEnvError r => (TEnv -> KindError) -> Eff r ()
+throw f = do
+  tenv <- get
+  throwError $ f tenv
+
+unType :: (Kinded a, WithTEnvError r) => a -> Eff r ()
+unType ty = do
+  k <- kindOf ty
+  case k of
+    Moded Linear _       -> throw $ UnexpectedLinearKind $ toType ty
+    Moded Unrestricted k ->
+      case k of
+        Type     -> pure ()
+        KFun _ _ -> throw $ UnexpectedHigherKind k $ toType ty
+
+class Kinded a where
+  toType :: a -> Type
+
+  kindOf :: WithTEnvError r => a -> Eff r MKind
+
+instance Kinded (Moded Type) where
+  toType (Moded _ ty) = ty
+
+  kindOf (Moded _ ty) = kindOf ty
+
+instance Kinded Type where
+  toType = id
+
+  kindOf (TFun ty1 ty2)  = unType ty1 >> unType ty2 $> un Type
+  kindOf (Ref ty)        = unType ty $> un Type
+  kindOf (Forall b k ty) = withTypeBinding b (toUn k) $ unType ty $> un Type
+
+insertLookup :: Ord k => k -> a -> Map.Map k a -> (Maybe a, Map.Map k a)
+insertLookup k x t = Map.insertLookupWithKey (\_ a _ -> a) k x t
+
+insert :: Member (State TEnv) r => Int -> MKind -> Eff r (Maybe MKind)
+insert n k = do
+  tenv <- gets gtenv
+  let (old, m) = insertLookup n k tenv
+  modify $ replaceGTEnv m
+  return old
+
+alter :: WithTEnvError r => Maybe MKind -> Int -> Eff r ()
+alter old n = do
+  tenv <- gets gtenv
+  case Map.lookup n tenv of
+    Just (Moded Linear k) -> throwError $ UnusedTypeVariableWithLinearKind k
+    _                     -> return ()
+  modify $ replaceGTEnv $ Map.update (\_ -> old) n tenv
+
+replaceGTEnv :: Map.Map Int MKind -> TEnv -> TEnv
+replaceGTEnv m tenv = tenv { gtenv = m }
+
+replaceITEnv :: [Maybe MKind] -> TEnv -> TEnv
+replaceITEnv xs tenv = tenv { itenv = xs }
+
+uncons []       = throwError EmptyITEnv
+uncons (x : xs) = return $ (x, xs)
+
+push :: Member (State TEnv) r => MKind -> Eff r ()
+push k = modify f
+  where
+    f tenv = tenv { itenv = Just k : itenv tenv }
+
+pop :: WithTEnvError r => Mode -> Eff r ()
+pop m = do
+  tenv <- gets itenv
+  (x, xs) <- uncons tenv
+  modify $ replaceITEnv xs
+  case x of
+    Just (Moded Linear k) -> throwError $ UnusedTypeVariableWithLinearKind k
+    _                     -> return ()
+
+withTypeBinding :: WithTEnvError r => Binder -> MKind -> Eff r a -> Eff r a
+withTypeBinding Index k e = do
+  push k
+  x <- e
+  pop $ getMode k
+  return x
+withTypeBinding (Bind n) k e = do
+  old <- insert n k
+  x <- e
+  alter old n
+  return x
