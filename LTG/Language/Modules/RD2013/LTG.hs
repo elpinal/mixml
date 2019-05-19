@@ -57,8 +57,8 @@ import Control.Monad.Freer.Reader
 import Control.Monad.Freer.State
 import Data.Functor
 import qualified Data.Map.Strict as Map
-import Data.Monoid
-import Data.Semigroup
+import Data.Monoid hiding (Any)
+import Data.Semigroup hiding (Any)
 import qualified Data.Set as Set
 import Data.String
 import qualified Data.Text as T
@@ -378,21 +378,35 @@ data Env = Env
 data Environmental a = Environmental Env a
   deriving (Eq, Show)
 
+data Consistent a
+  = Any
+  | Consistent a
+
+instance Eq a => Eq (Consistent a) where
+  Consistent x == Consistent y = x == y
+  _ == _                       = True
+
+instance Show a => Show (Consistent a) where
+  show Any            = "Any"
+  show (Consistent x) = show x
+
+type CTEnv = Consistent TEnv
+
 data KindError
-  = UnexpectedLinearKind Type TEnv
-  | UnexpectedHigherKind Kind Type TEnv
+  = UnexpectedLinearKind Type CTEnv
+  | UnexpectedHigherKind Kind Type CTEnv
   | UnusedTypeVariableWithLinearKind Kind
   | EmptyITEnv
   | UnboundTypeVariable Variable
-  | UnusedTypeVariables (Set.Set Variable) TEnv
+  | UnusedTypeVariables (Set.Set Variable) CTEnv
   deriving (Eq, Show)
 
 type WithTEnvError r = Members '[State TEnv, Error KindError] r
 
-throw :: WithTEnvError r => (TEnv -> KindError) -> Eff r ()
+throw :: WithTEnvError r => (CTEnv -> KindError) -> Eff r ()
 throw f = do
   tenv <- get
-  throwError $ f tenv
+  throwError $ f $ Consistent tenv
 
 unType :: (Kinded a, WithTEnvError r) => a -> Eff r ()
 unType ty = do
@@ -414,7 +428,7 @@ close tenv e = do
   (x, tenv) <- runState tenv e
   let set = findLinear tenv
   when (not $ Set.null set) $
-    throwError $ UnusedTypeVariables set tenv
+    throwError $ UnusedTypeVariables set $ Consistent tenv
   return x
 
 class Kinded a where
