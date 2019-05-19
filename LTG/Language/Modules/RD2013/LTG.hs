@@ -35,6 +35,19 @@ module Language.Modules.RD2013.LTG
   -- * Pretty-printing
   , Prec(..)
   , Named(..)
+
+  -- * Linearity
+  , close
+
+  -- * Kinding
+  , Kinded(..)
+
+  -- * Environments
+  , TEnv
+  , emptyTEnv
+
+  -- * Errors
+  , KindError(..)
   ) where
 
 import Control.Monad
@@ -136,7 +149,7 @@ type MKind = Moded Kind
 data Variable
   = Variable Int
   | Global Int
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 variable :: Int -> Variable
 variable = Variable
@@ -332,8 +345,28 @@ data TEnv = TEnv
   }
   deriving (Eq, Show)
 
+emptyTEnv :: TEnv
+emptyTEnv = TEnv
+  { gtenv = mempty
+  , itenv = []
+  }
+
+isLinear :: Moded a -> Bool
+isLinear x = getMode x == Linear
+
 findLinear :: TEnv -> Set.Set Variable
-findLinear tenv = undefined
+findLinear tenv =
+  Set.map global (Map.keysSet $ Map.filter isLinear $ gtenv tenv)
+  <>
+  foldr g mempty (map f $ zip [0..] $ itenv tenv)
+    where
+      f (_, Nothing) = Nothing
+      f (n, Just k)
+        | isLinear k = Just $ variable n
+        | otherwise  = Nothing
+
+      g Nothing s  = s
+      g (Just v) s = Set.insert v s
 
 data Env = Env
   { tenv :: TEnv

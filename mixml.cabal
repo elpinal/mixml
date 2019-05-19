@@ -96,6 +96,7 @@ test-suite test-mixml
   build-depends:       base
                      , ltg
                      , hspec >= 2.7.1
+                     , freer-simple
                      , prettyprinter
   other-modules:       Language.Modules.RD2013.LTGSpec
   hs-source-dirs:      test

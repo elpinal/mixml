@@ -4,6 +4,9 @@ import Test.Hspec
 
 import Data.Text.Prettyprint.Doc
 
+import Control.Monad.Freer
+import Control.Monad.Freer.Error
+
 import Language.Modules.RD2013.LTG
 
 infixr 7 ^>
@@ -13,6 +16,9 @@ infixr 7 ^>
 infixr 7 +>
 (+>) :: MType -> MType -> Type
 (+>) = TFun
+
+computeKind :: Type -> Either KindError MKind
+computeKind = run . runError . close emptyTEnv . kindOf
 
 spec :: Spec
 spec = do
@@ -198,3 +204,8 @@ spec = do
       show (pretty $ Named $ Restrict t ["a"])                   `shouldBe` "restrict g3 to [a]"
       show (pretty $ Named $ Restrict t ["a", "z", "k"])         `shouldBe` "restrict g3 to [a, k, z]"
       show (pretty $ Named $ Restrict (App t t) ["a", "z", "k"]) `shouldBe` "restrict g3 g3 to [a, k, z]"
+
+  describe "kindOf" $ do
+    it "computes a kind for a type" $ do
+      computeKind (TVar $ variable 0)                               `shouldBe` Left (UnboundTypeVariable $ variable 0)
+      computeKind (Forall Index (un Type) $ un $ TVar $ variable 0) `shouldBe` return (un Type)
