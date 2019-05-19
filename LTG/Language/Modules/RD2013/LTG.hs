@@ -347,6 +347,7 @@ data KindError
   | UnexpectedHigherKind Kind Type TEnv
   | UnusedTypeVariableWithLinearKind Kind
   | EmptyITEnv
+  | UnboundTypeVariable Variable
   deriving (Eq, Show)
 
 type WithTEnvError r = Members '[State TEnv, Error KindError] r
@@ -366,6 +367,11 @@ unType ty = do
         Type     -> pure ()
         KFun _ _ -> throw $ UnexpectedHigherKind k $ toType ty
 
+(!?) :: [a] -> Int -> Maybe a
+[] !? n       = Nothing
+(x : _) !? 0  = Just x
+(_ : xs) !? n = xs !? (n - 1)
+
 class Kinded a where
   toType :: a -> Type
 
@@ -376,9 +382,21 @@ instance Kinded (Moded Type) where
 
   kindOf (Moded _ ty) = kindOf ty
 
+instance Kinded Variable where
+  toType = TVar
+
+  kindOf v @ (Global n) = do
+    tenv <- gets gtenv
+    maybe (throwError $ UnboundTypeVariable v) return $ Map.lookup n tenv
+
+  kindOf v @ (Variable n) = do
+    tenv <- gets itenv
+    maybe (throwError $ UnboundTypeVariable v) return $ join $ tenv !? n
+
 instance Kinded Type where
   toType = id
 
+  kindOf (TVar v)        = kindOf v
   kindOf (TFun ty1 ty2)  = unType ty1 >> unType ty2 $> un Type
   kindOf (Ref ty)        = unType ty $> un Type
   kindOf (Forall b k ty) = withTypeBinding b (toUn k) $ unType ty $> un Type
