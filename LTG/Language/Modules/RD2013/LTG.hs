@@ -344,7 +344,7 @@ instance PrettyEnv Term where
 
 data TEnv = TEnv
   { gtenv :: Map.Map Int MKind -- Global type environment.
-  , itenv :: [Maybe MKind] -- Indexed type environment.
+  , itenv :: [MKind] -- Indexed type environment.
   }
   deriving (Eq, Show)
 
@@ -363,8 +363,7 @@ findLinear tenv =
   <>
   foldr g mempty (map f $ zip [0..] $ itenv tenv)
     where
-      f (_, Nothing) = Nothing
-      f (n, Just k)
+      f (n, k)
         | isLinear k = Just $ variable n
         | otherwise  = Nothing
 
@@ -453,7 +452,7 @@ instance Kinded Variable where
 
   kindOf v @ (Variable n) = do
     tenv <- gets itenv
-    maybe (throwError $ UnboundTypeVariable v) return $ join $ tenv !? n
+    maybe (throwError $ UnboundTypeVariable v) return $ tenv !? n
 
 instance Kinded Type where
   toType = id
@@ -484,7 +483,7 @@ alter old n = do
 replaceGTEnv :: Map.Map Int MKind -> TEnv -> TEnv
 replaceGTEnv m tenv = tenv { gtenv = m }
 
-replaceITEnv :: [Maybe MKind] -> TEnv -> TEnv
+replaceITEnv :: [MKind] -> TEnv -> TEnv
 replaceITEnv xs tenv = tenv { itenv = xs }
 
 uncons []       = throwError EmptyITEnv
@@ -493,7 +492,7 @@ uncons (x : xs) = return $ (x, xs)
 push :: Member (State TEnv) r => MKind -> Eff r ()
 push k = modify f
   where
-    f tenv = tenv { itenv = Just k : itenv tenv }
+    f tenv = tenv { itenv = k : itenv tenv }
 
 pop :: WithTEnvError r => Mode -> Eff r ()
 pop m = do
@@ -501,8 +500,8 @@ pop m = do
   (x, xs) <- uncons tenv
   modify $ replaceITEnv xs
   case x of
-    Just (Moded Linear k) -> throwError $ UnusedTypeVariableWithLinearKind k
-    _                     -> return ()
+    Moded Linear k -> throwError $ UnusedTypeVariableWithLinearKind k
+    _              -> return ()
 
 withTypeBinding :: WithTEnvError r => Binder -> MKind -> Eff r a -> Eff r a
 withTypeBinding Index k e = do
