@@ -6,6 +6,7 @@ import Data.Text.Prettyprint.Doc
 
 import Control.Monad.Freer
 import Control.Monad.Freer.Error
+import Control.Monad.Freer.State
 
 import Language.Modules.RD2013.LTG
 
@@ -17,8 +18,8 @@ infixr 7 +>
 (+>) :: MType -> MType -> Type
 (+>) = TFun
 
-computeKind :: Type -> Either KindError MKind
-computeKind = run . runError . close emptyTEnv . kindOf
+computeKind :: TEnv -> Type -> Either KindError MKind
+computeKind e = run . runError . evalState e . kindOf
 
 spec :: Spec
 spec = do
@@ -207,11 +208,18 @@ spec = do
 
   describe "kindOf" $ do
     it "computes a kind for a type" $ do
-      computeKind (TVar $ variable 0)                                  `shouldBe` Left (UnboundTypeVariable $ variable 0)
-      computeKind (Forall Index (un Type) $ un $ TVar $ variable 0)    `shouldBe` return (un Type)
-      computeKind (Forall Index (lin Type) $ un $ TVar $ variable 0)   `shouldBe` return (un Type)
-      computeKind (Forall Index (un Type) $ un $ TVar $ variable 1)    `shouldBe` Left (UnboundTypeVariable $ variable 1)
-      computeKind (Forall (Bind 0) (un Type) $ un $ TVar $ variable 0) `shouldBe` Left (UnboundTypeVariable $ variable 0)
+      computeKind emptyTEnv (TVar $ variable 0)                                  `shouldBe` Left (UnboundTypeVariable $ variable 0)
+      computeKind emptyTEnv (Forall Index (un Type) $ un $ TVar $ variable 0)    `shouldBe` return (un Type)
+      computeKind emptyTEnv (Forall Index (lin Type) $ un $ TVar $ variable 0)   `shouldBe` return (un Type)
+      computeKind emptyTEnv (Forall Index (un Type) $ un $ TVar $ variable 1)    `shouldBe` Left (UnboundTypeVariable $ variable 1)
+      computeKind emptyTEnv (Forall (Bind 0) (un Type) $ un $ TVar $ variable 0) `shouldBe` Left (UnboundTypeVariable $ variable 0)
 
-      computeKind (Forall Index (lin Type) $ un $ Forall Index (lin $ Type ^> Type) $ un $ TVar $ variable 1) `shouldBe` return (un Type)
-      computeKind (Forall Index (lin Type) $ un $ Forall Index (lin $ Type ^> Type) $ un $ TVar $ variable 0) `shouldBe` Left (UnexpectedHigherKind (Type ^> Type) (TVar $ variable 0) Any)
+      computeKind emptyTEnv (Forall Index (lin Type) $ un $ Forall Index (lin $ Type ^> Type) $ un $ TVar $ variable 1) `shouldBe` return (un Type)
+      computeKind emptyTEnv (Forall Index (lin Type) $ un $ Forall Index (lin $ Type ^> Type) $ un $ TVar $ variable 0) `shouldBe` Left (UnexpectedHigherKind (Type ^> Type) (TVar $ variable 0) Any)
+
+      computeKind emptyTEnv (Forall Index (un Type) $ un $ un (TVar $ variable 0) +> un (TVar $ variable 0))  `shouldBe` return (un Type)
+      computeKind emptyTEnv (Forall Index (lin Type) $ un $ un (TVar $ variable 0) +> un (TVar $ variable 0)) `shouldBe` return (un Type)
+
+      computeKind (fromGTEnv [(0, lin Type)]) (TVar $ global 0)                                            `shouldBe` return (lin Type)
+      computeKind (fromGTEnv [(0, lin Type)]) (un (TVar $ global 0) +> un (TVar $ global 0))               `shouldBe` Left (UnexpectedLinearKind (TVar $ global 0) Any)
+      computeKind (fromGTEnv [(0, lin Type), (8, un Type)]) (un (TVar $ global 8) +> un (TVar $ global 0)) `shouldBe` Left (UnexpectedLinearKind (TVar $ global 0) Any)

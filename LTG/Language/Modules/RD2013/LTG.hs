@@ -45,6 +45,7 @@ module Language.Modules.RD2013.LTG
   -- * Environments
   , TEnv
   , emptyTEnv
+  , fromGTEnv
 
   -- * Errors
   , KindError(..)
@@ -353,6 +354,9 @@ emptyTEnv = TEnv
   { gtenv = mempty
   , itenv = []
   }
+
+fromGTEnv :: Map.Map Int MKind -> TEnv
+fromGTEnv e = emptyTEnv { gtenv = e }
 
 isLinear :: Moded a -> Bool
 isLinear x = getMode x == Linear
