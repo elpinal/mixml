@@ -465,6 +465,7 @@ instance Kinded Type where
   kindOf (TFun ty1 ty2)  = unType ty1 >> unType ty2 $> un Type
   kindOf (Ref ty)        = unType ty $> un Type
   kindOf (Forall b k ty) = withTypeBinding b (toUn k) $ unType ty $> un Type
+  kindOf (Some b k ty)   = withTypeBinding b (toUn k) $ unType ty $> un Type
 
 insertLookup :: Ord k => k -> a -> Map.Map k a -> (Maybe a, Map.Map k a)
 insertLookup k x t = Map.insertLookupWithKey (\_ a _ -> a) k x t
