@@ -416,13 +416,10 @@ throw f = do
 
 unType :: (Kinded a, WithTEnvError r) => a -> Eff r ()
 unType ty = do
-  k <- kindOf ty
+  k <- unKind ty
   case k of
-    Moded Linear _       -> throw $ UnexpectedLinearKind $ toType ty
-    Moded Unrestricted k ->
-      case k of
-        Type     -> pure ()
-        KFun _ _ -> throw $ UnexpectedHigherKind k $ toType ty
+    Type     -> pure ()
+    KFun _ _ -> throw $ UnexpectedHigherKind k $ toType ty
 
 (!?) :: [a] -> Int -> Maybe a
 [] !? n       = Nothing
@@ -468,11 +465,11 @@ instance Kinded Type where
   kindOf (Some b k ty)   = withTypeBinding b (toUn k) $ unType ty $> un Type
   kindOf (TAbs b k ty)   = fmap (un . KFun k) $ withTypeBinding b (un k) $ unKind ty
 
-unKind :: WithTEnvError r => Type -> Eff r Kind
+unKind :: (Kinded a, WithTEnvError r) => a -> Eff r Kind
 unKind ty = do
   k <- kindOf ty
   case k of
-    Moded Linear _       -> throw $ UnexpectedLinearKind ty
+    Moded Linear _       -> throw $ UnexpectedLinearKind $ toType ty
     Moded Unrestricted k -> return k
 
 insertLookup :: Ord k => k -> a -> Map.Map k a -> (Maybe a, Map.Map k a)
