@@ -409,7 +409,7 @@ data KindError
 
 type WithTEnvError r = Members '[State TEnv, Error KindError] r
 
-throw :: WithTEnvError r => (CTEnv -> KindError) -> Eff r ()
+throw :: WithTEnvError r => (CTEnv -> KindError) -> Eff r a
 throw f = do
   tenv <- get
   throwError $ f $ Consistent tenv
@@ -466,6 +466,14 @@ instance Kinded Type where
   kindOf (Ref ty)        = unType ty $> un Type
   kindOf (Forall b k ty) = withTypeBinding b (toUn k) $ unType ty $> un Type
   kindOf (Some b k ty)   = withTypeBinding b (toUn k) $ unType ty $> un Type
+  kindOf (TAbs b k ty)   = fmap (un . KFun k) $ withTypeBinding b (un k) $ unKind ty
+
+unKind :: WithTEnvError r => Type -> Eff r Kind
+unKind ty = do
+  k <- kindOf ty
+  case k of
+    Moded Linear _       -> throw $ UnexpectedLinearKind ty
+    Moded Unrestricted k -> return k
 
 insertLookup :: Ord k => k -> a -> Map.Map k a -> (Maybe a, Map.Map k a)
 insertLookup k x t = Map.insertLookupWithKey (\_ a _ -> a) k x t

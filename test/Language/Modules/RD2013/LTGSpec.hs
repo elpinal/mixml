@@ -225,3 +225,13 @@ spec = do
       computeKind (fromGTEnv [(0, lin Type), (8, un Type)]) (un (TVar $ global 8) +> un (TVar $ global 0)) `shouldBe` Left (UnexpectedLinearKind (TVar $ global 0) Any)
 
       computeKind emptyTEnv (Some Index (un Type) $ un $ TVar $ variable 0) `shouldBe` return (un Type)
+
+      computeKind emptyTEnv (TAbs Index Type $ TVar $ variable 0)                                  `shouldBe` return (un $ Type ^> Type)
+      computeKind emptyTEnv (TAbs Index Type $ un (TVar $ variable 0) +> un (TVar $ variable 0))   `shouldBe` return (un $ Type ^> Type)
+      computeKind emptyTEnv (TAbs Index Type $ lin (TVar $ variable 0) +> lin (TVar $ variable 0)) `shouldBe` return (un $ Type ^> Type)
+
+      computeKind emptyTEnv (TAbs Index (Type ^> Type) $ TVar $ variable 0) `shouldBe` return (un $ (Type ^> Type) ^> Type ^> Type)
+
+      computeKind emptyTEnv (TAbs Index Type $ TAbs Index Type $ TVar $ variable 0)           `shouldBe` return (un $ Type ^> Type ^> Type)
+      computeKind emptyTEnv (TAbs Index Type $ TAbs Index (Type ^> Type) $ TVar $ variable 0) `shouldBe` return (un $ Type ^> (Type ^> Type) ^> Type ^> Type)
+      computeKind emptyTEnv (TAbs Index Type $ TAbs Index (Type ^> Type) $ TVar $ variable 1) `shouldBe` return (un $ Type ^> (Type ^> Type) ^> Type)
