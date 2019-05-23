@@ -235,3 +235,8 @@ spec = do
       computeKind emptyTEnv (TAbs Index Type $ TAbs Index Type $ TVar $ variable 0)           `shouldBe` return (un $ Type ^> Type ^> Type)
       computeKind emptyTEnv (TAbs Index Type $ TAbs Index (Type ^> Type) $ TVar $ variable 0) `shouldBe` return (un $ Type ^> (Type ^> Type) ^> Type ^> Type)
       computeKind emptyTEnv (TAbs Index Type $ TAbs Index (Type ^> Type) $ TVar $ variable 1) `shouldBe` return (un $ Type ^> (Type ^> Type) ^> Type)
+
+      computeKind emptyTEnv (Forall Index (un Type) $ un $ TRecord [])                                        `shouldBe` return (un Type)
+      computeKind emptyTEnv (Forall Index (un Type) $ un $ TRecord [("a", un $ TVar $ variable 0)])           `shouldBe` return (un Type)
+      computeKind emptyTEnv (Forall Index (lin Type) $ lin $ TRecord [("a", lin $ TVar $ variable 0)])        `shouldBe` return (un Type)
+      computeKind emptyTEnv (Forall Index (un $ Type ^> Type) $ un $ TRecord [("a", un $ TVar $ variable 0)]) `shouldBe` Left (UnexpectedHigherKind (Type ^> Type) (TVar $ variable 0) Any)

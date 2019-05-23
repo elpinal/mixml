@@ -464,6 +464,12 @@ instance Kinded Type where
   kindOf (Forall b k ty) = withTypeBinding b (toUn k) $ unType ty $> un Type
   kindOf (Some b k ty)   = withTypeBinding b (toUn k) $ unType ty $> un Type
   kindOf (TAbs b k ty)   = fmap (un . KFun k) $ withTypeBinding b (un k) $ unKind ty
+  kindOf (TRecord r)     = kindOf r
+
+instance Kinded (Record MType) where
+  toType = TRecord
+
+  kindOf (Record m) = mapM_ unType m $> un Type
 
 unKind :: (Kinded a, WithTEnvError r) => a -> Eff r Kind
 unKind ty = do
