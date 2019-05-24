@@ -21,6 +21,9 @@ infixr 7 +>
 computeKind :: TEnv -> Type -> Either KindError MKind
 computeKind e = run . runError . evalState e . kindOf
 
+tvar :: Int -> Type
+tvar = TVar . variable
+
 spec :: Spec
 spec = do
   describe "pretty" $ do
@@ -208,41 +211,41 @@ spec = do
 
   describe "kindOf" $ do
     it "computes a kind for a type" $ do
-      computeKind emptyTEnv (TVar $ variable 0)                                  `shouldBe` Left (UnboundTypeVariable $ variable 0)
-      computeKind emptyTEnv (Forall Index (un Type) $ un $ TVar $ variable 0)    `shouldBe` return (un Type)
-      computeKind emptyTEnv (Forall Index (lin Type) $ un $ TVar $ variable 0)   `shouldBe` return (un Type)
-      computeKind emptyTEnv (Forall Index (un Type) $ un $ TVar $ variable 1)    `shouldBe` Left (UnboundTypeVariable $ variable 1)
-      computeKind emptyTEnv (Forall (Bind 0) (un Type) $ un $ TVar $ variable 0) `shouldBe` Left (UnboundTypeVariable $ variable 0)
+      computeKind emptyTEnv (tvar 0)                                  `shouldBe` Left (UnboundTypeVariable $ variable 0)
+      computeKind emptyTEnv (Forall Index (un Type) $ un $ tvar 0)    `shouldBe` return (un Type)
+      computeKind emptyTEnv (Forall Index (lin Type) $ un $ tvar 0)   `shouldBe` return (un Type)
+      computeKind emptyTEnv (Forall Index (un Type) $ un $ tvar 1)    `shouldBe` Left (UnboundTypeVariable $ variable 1)
+      computeKind emptyTEnv (Forall (Bind 0) (un Type) $ un $ tvar 0) `shouldBe` Left (UnboundTypeVariable $ variable 0)
 
-      computeKind emptyTEnv (Forall Index (lin Type) $ un $ Forall Index (lin $ Type ^> Type) $ un $ TVar $ variable 1) `shouldBe` return (un Type)
-      computeKind emptyTEnv (Forall Index (lin Type) $ un $ Forall Index (lin $ Type ^> Type) $ un $ TVar $ variable 0) `shouldBe` Left (UnexpectedHigherKind (Type ^> Type) (TVar $ variable 0) Any)
+      computeKind emptyTEnv (Forall Index (lin Type) $ un $ Forall Index (lin $ Type ^> Type) $ un $ tvar 1) `shouldBe` return (un Type)
+      computeKind emptyTEnv (Forall Index (lin Type) $ un $ Forall Index (lin $ Type ^> Type) $ un $ tvar 0) `shouldBe` Left (UnexpectedHigherKind (Type ^> Type) (tvar 0) Any)
 
-      computeKind emptyTEnv (Forall Index (un Type) $ un $ un (TVar $ variable 0) +> un (TVar $ variable 0))  `shouldBe` return (un Type)
-      computeKind emptyTEnv (Forall Index (lin Type) $ un $ un (TVar $ variable 0) +> un (TVar $ variable 0)) `shouldBe` return (un Type)
+      computeKind emptyTEnv (Forall Index (un Type) $ un $ un (tvar 0) +> un (tvar 0))  `shouldBe` return (un Type)
+      computeKind emptyTEnv (Forall Index (lin Type) $ un $ un (tvar 0) +> un (tvar 0)) `shouldBe` return (un Type)
 
       computeKind (fromGTEnv [(0, lin Type)]) (TVar $ global 0)                                            `shouldBe` return (lin Type)
       computeKind (fromGTEnv [(0, lin Type)]) (un (TVar $ global 0) +> un (TVar $ global 0))               `shouldBe` Left (UnexpectedLinearKind (TVar $ global 0) Any)
       computeKind (fromGTEnv [(0, lin Type), (8, un Type)]) (un (TVar $ global 8) +> un (TVar $ global 0)) `shouldBe` Left (UnexpectedLinearKind (TVar $ global 0) Any)
 
-      computeKind emptyTEnv (Some Index (un Type) $ un $ TVar $ variable 0) `shouldBe` return (un Type)
+      computeKind emptyTEnv (Some Index (un Type) $ un $ tvar 0) `shouldBe` return (un Type)
 
-      computeKind emptyTEnv (TAbs Index Type $ TVar $ variable 0)                                  `shouldBe` return (un $ Type ^> Type)
-      computeKind emptyTEnv (TAbs Index Type $ un (TVar $ variable 0) +> un (TVar $ variable 0))   `shouldBe` return (un $ Type ^> Type)
-      computeKind emptyTEnv (TAbs Index Type $ lin (TVar $ variable 0) +> lin (TVar $ variable 0)) `shouldBe` return (un $ Type ^> Type)
+      computeKind emptyTEnv (TAbs Index Type $ tvar 0)                       `shouldBe` return (un $ Type ^> Type)
+      computeKind emptyTEnv (TAbs Index Type $ un (tvar 0) +> un (tvar 0))   `shouldBe` return (un $ Type ^> Type)
+      computeKind emptyTEnv (TAbs Index Type $ lin (tvar 0) +> lin (tvar 0)) `shouldBe` return (un $ Type ^> Type)
 
-      computeKind emptyTEnv (TAbs Index (Type ^> Type) $ TVar $ variable 0) `shouldBe` return (un $ (Type ^> Type) ^> Type ^> Type)
+      computeKind emptyTEnv (TAbs Index (Type ^> Type) $ tvar 0) `shouldBe` return (un $ (Type ^> Type) ^> Type ^> Type)
 
-      computeKind emptyTEnv (TAbs Index Type $ TAbs Index Type $ TVar $ variable 0)           `shouldBe` return (un $ Type ^> Type ^> Type)
-      computeKind emptyTEnv (TAbs Index Type $ TAbs Index (Type ^> Type) $ TVar $ variable 0) `shouldBe` return (un $ Type ^> (Type ^> Type) ^> Type ^> Type)
-      computeKind emptyTEnv (TAbs Index Type $ TAbs Index (Type ^> Type) $ TVar $ variable 1) `shouldBe` return (un $ Type ^> (Type ^> Type) ^> Type)
+      computeKind emptyTEnv (TAbs Index Type $ TAbs Index Type $ tvar 0)           `shouldBe` return (un $ Type ^> Type ^> Type)
+      computeKind emptyTEnv (TAbs Index Type $ TAbs Index (Type ^> Type) $ tvar 0) `shouldBe` return (un $ Type ^> (Type ^> Type) ^> Type ^> Type)
+      computeKind emptyTEnv (TAbs Index Type $ TAbs Index (Type ^> Type) $ tvar 1) `shouldBe` return (un $ Type ^> (Type ^> Type) ^> Type)
 
-      computeKind emptyTEnv (Forall Index (un Type) $ un $ TRecord [])                                        `shouldBe` return (un Type)
-      computeKind emptyTEnv (Forall Index (un Type) $ un $ TRecord [("a", un $ TVar $ variable 0)])           `shouldBe` return (un Type)
-      computeKind emptyTEnv (Forall Index (lin Type) $ lin $ TRecord [("a", lin $ TVar $ variable 0)])        `shouldBe` return (un Type)
-      computeKind emptyTEnv (Forall Index (un $ Type ^> Type) $ un $ TRecord [("a", un $ TVar $ variable 0)]) `shouldBe` Left (UnexpectedHigherKind (Type ^> Type) (TVar $ variable 0) Any)
+      computeKind emptyTEnv (Forall Index (un Type) $ un $ TRecord [])                             `shouldBe` return (un Type)
+      computeKind emptyTEnv (Forall Index (un Type) $ un $ TRecord [("a", un $ tvar 0)])           `shouldBe` return (un Type)
+      computeKind emptyTEnv (Forall Index (lin Type) $ lin $ TRecord [("a", lin $ tvar 0)])        `shouldBe` return (un Type)
+      computeKind emptyTEnv (Forall Index (un $ Type ^> Type) $ un $ TRecord [("a", un $ tvar 0)]) `shouldBe` Left (UnexpectedHigherKind (Type ^> Type) (tvar 0) Any)
 
-      computeKind emptyTEnv (Forall Index (un Type) $ un $ TApp (TVar $ variable 0) $ TVar $ variable 0) `shouldBe` Left (NotHigherKind (TVar $ variable 0) (TVar $ variable 0) Any)
+      computeKind emptyTEnv (Forall Index (un Type) $ un $ TApp (tvar 0) $ tvar 0) `shouldBe` Left (NotHigherKind (tvar 0) (tvar 0) Any)
 
-      computeKind emptyTEnv (Forall Index (un $ Type ^> Type) $ un $ Forall Index (un Type) $ un $ TApp (TVar $ variable 1) $ TVar $ variable 0) `shouldBe` return (un Type)
-      computeKind emptyTEnv (Forall Index (un $ Type ^> Type ^> Type) $ un $ Forall Index (un Type) $ un $ TApp (TVar $ variable 1) $ TVar $ variable 0) `shouldBe` Left (UnexpectedHigherKind (Type ^> Type) (TApp (TVar $ variable 1) $ TVar $ variable 0) Any)
-      computeKind emptyTEnv (Forall Index (un $ Type ^> Type ^> Type) $ un $ Forall Index (un Type) $ un $ TApp (TApp (TVar $ variable 1) $ TVar $ variable 0) $ TVar $ variable 0) `shouldBe` return (un Type)
+      computeKind emptyTEnv (Forall Index (un $ Type ^> Type) $ un $ Forall Index (un Type) $ un $ TApp (tvar 1) $ tvar 0)                         `shouldBe` return (un Type)
+      computeKind emptyTEnv (Forall Index (un $ Type ^> Type ^> Type) $ un $ Forall Index (un Type) $ un $ TApp (tvar 1) $ tvar 0)                 `shouldBe` Left (UnexpectedHigherKind (Type ^> Type) (TApp (tvar 1) $ tvar 0) Any)
+      computeKind emptyTEnv (Forall Index (un $ Type ^> Type ^> Type) $ un $ Forall Index (un Type) $ un $ TApp (TApp (tvar 1) $ tvar 0) $ tvar 0) `shouldBe` return (un Type)
