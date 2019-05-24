@@ -405,6 +405,8 @@ data KindError
   | EmptyITEnv
   | UnboundTypeVariable Variable
   | UnusedTypeVariables (Set.Set Variable) CTEnv
+  | KindMismatch Type Type Kind Kind CTEnv
+  | NotHigherKind Type Type CTEnv
   deriving (Eq, Show)
 
 type WithTEnvError r = Members '[State TEnv, Error KindError] r
@@ -464,7 +466,14 @@ instance Kinded Type where
   kindOf (Forall b k ty) = withTypeBinding b (toUn k) $ unType ty $> un Type
   kindOf (Some b k ty)   = withTypeBinding b (toUn k) $ unType ty $> un Type
   kindOf (TAbs b k ty)   = fmap (un . KFun k) $ withTypeBinding b (un k) $ unKind ty
+  kindOf (TApp ty1 ty2)  = fmap un $ join $ kindOfTApp ty1 ty2 <$> unKind ty1 <*> unKind ty2
   kindOf (TRecord r)     = kindOf r
+
+kindOfTApp :: WithTEnvError r => Type -> Type -> Kind -> Kind -> Eff r Kind
+kindOfTApp ty1 ty2 (KFun k1 k2) k
+  | k1 == k               = return k2
+  | otherwise             = throw $ KindMismatch ty1 ty2 k1 k
+kindOfTApp ty1 ty2 Type _ = throw $ NotHigherKind ty1 ty2
 
 instance Kinded (Record MType) where
   toType = TRecord

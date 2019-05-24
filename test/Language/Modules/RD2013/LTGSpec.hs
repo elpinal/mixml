@@ -240,3 +240,9 @@ spec = do
       computeKind emptyTEnv (Forall Index (un Type) $ un $ TRecord [("a", un $ TVar $ variable 0)])           `shouldBe` return (un Type)
       computeKind emptyTEnv (Forall Index (lin Type) $ lin $ TRecord [("a", lin $ TVar $ variable 0)])        `shouldBe` return (un Type)
       computeKind emptyTEnv (Forall Index (un $ Type ^> Type) $ un $ TRecord [("a", un $ TVar $ variable 0)]) `shouldBe` Left (UnexpectedHigherKind (Type ^> Type) (TVar $ variable 0) Any)
+
+      computeKind emptyTEnv (Forall Index (un Type) $ un $ TApp (TVar $ variable 0) $ TVar $ variable 0) `shouldBe` Left (NotHigherKind (TVar $ variable 0) (TVar $ variable 0) Any)
+
+      computeKind emptyTEnv (Forall Index (un $ Type ^> Type) $ un $ Forall Index (un Type) $ un $ TApp (TVar $ variable 1) $ TVar $ variable 0) `shouldBe` return (un Type)
+      computeKind emptyTEnv (Forall Index (un $ Type ^> Type ^> Type) $ un $ Forall Index (un Type) $ un $ TApp (TVar $ variable 1) $ TVar $ variable 0) `shouldBe` Left (UnexpectedHigherKind (Type ^> Type) (TApp (TVar $ variable 1) $ TVar $ variable 0) Any)
+      computeKind emptyTEnv (Forall Index (un $ Type ^> Type ^> Type) $ un $ Forall Index (un Type) $ un $ TApp (TApp (TVar $ variable 1) $ TVar $ variable 0) $ TVar $ variable 0) `shouldBe` return (un Type)
