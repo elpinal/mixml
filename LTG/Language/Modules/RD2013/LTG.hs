@@ -70,11 +70,15 @@ import Data.String
 import qualified Data.Text as T
 import Data.Text.Prettyprint.Doc
 import GHC.Exts
+import GHC.Generics
+
+import Shift
 
 data Mode
   = Unrestricted
   | Linear
   deriving (Eq, Show)
+  deriving Shift via Fixed Mode
 
 instance Pretty Mode where
   pretty Unrestricted = "U"
@@ -88,6 +92,9 @@ lin = Moded Linear
 
 data Moded a = Moded Mode a
   deriving (Eq, Show)
+  deriving Generic
+
+instance Shift a => Shift (Moded a)
 
 -- "Unrestricted" mode is omitted for pretty-printing.
 instance PrettyPrec a => PrettyPrec (Moded a) where
@@ -112,6 +119,9 @@ newtype Label = Label T.Text
 
 newtype Record a = Record (Map.Map Label a)
   deriving (Eq, Show)
+  deriving Generic
+
+instance Shift a => Shift (Record a)
 
 instance IsList (Record a) where
   type Item (Record a) = (Label, a)
@@ -129,6 +139,7 @@ data Kind
   = Type
   | KFun Kind Kind
   deriving (Eq, Show)
+  deriving Shift via Fixed Kind
 
 class PrettyPrec a where
   prettyPrec :: Int -> a -> Doc ann
@@ -156,6 +167,10 @@ data Variable
   = Variable Int
   | Global Int
   deriving (Eq, Ord, Show)
+
+instance Shift Variable where
+  shiftAbove c d (Variable n) = Variable $ coerce $ shiftAbove c d $ IndexedVariable n
+  shiftAbove _ _ g            = g
 
 variable :: Int -> Variable
 variable = Variable
@@ -214,6 +229,7 @@ data Binder
   = Index
   | Bind Int
   deriving (Eq, Show)
+  deriving Shift via Fixed Binder
 
 isIndex :: Binder -> Bool
 isIndex Index    = True
@@ -244,6 +260,17 @@ data Type
   | TAbs Binder Kind Type
   | TApp Type Type
   deriving (Eq, Show)
+  deriving Generic
+
+delta :: Binder -> Int
+delta Index    = 1
+delta (Bind _) = 0
+
+instance Shift Type where
+  shiftAbove c d (Forall b k ty) = Forall b k $ shiftAbove (c + delta b) d ty
+  shiftAbove c d (Some b k ty)   = Some b k $ shiftAbove (c + delta b) d ty
+  shiftAbove c d (TAbs b k ty)   = TAbs b k $ shiftAbove (c + delta b) d ty
+  shiftAbove c d x               = to $ gShiftAbove c d $ from x
 
 prettyTypeBind :: (Member (Reader NameEnv) r, PrettyPrec k, PrettyEnv ty) => Int -> Binder -> k -> ty -> Doc ann -> Eff r (Doc ann)
 prettyTypeBind n b k ty d = fmap (parensWhen $ n >= 4) $ f <$> prettyTypeBinder b <*> local (ifIndex b incTypeDepth) (prettyEnv0 ty)

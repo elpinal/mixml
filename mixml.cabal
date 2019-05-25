@@ -69,6 +69,8 @@ common all
   ghc-options:         -Wincomplete-patterns
   default-extensions:  ConstraintKinds
                      , DataKinds
+                     , DeriveGeneric
+                     , DerivingVia
                      , FlexibleContexts
                      , FlexibleInstances
                      , GeneralizedNewtypeDeriving
@@ -77,9 +79,18 @@ common all
                      , TypeFamilies
                      , TypeOperators
 
+library shift
+  import:              all
+  build-depends:       base
+                     , containers
+  exposed-modules:     Shift
+  hs-source-dirs:      shift
+
+
 library ltg
   import:              all
   build-depends:       base
+                     , shift
                      , containers
                      , freer-simple
                      , prettyprinter >= 1.2.1
@@ -95,6 +106,7 @@ test-suite test-mixml
   main-is:             Spec.hs
   build-depends:       base
                      , ltg
+                     , shift
                      , hspec >= 2.7.1
                      , freer-simple
                      , prettyprinter

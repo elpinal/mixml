@@ -9,6 +9,7 @@ import Control.Monad.Freer.Error
 import Control.Monad.Freer.State
 
 import Language.Modules.RD2013.LTG
+import Shift
 
 infixr 7 ^>
 (^>) :: Kind -> Kind -> Kind
@@ -253,3 +254,14 @@ spec = do
       computeKind emptyTEnv (Forall Index (un $ Type ^> Type ^> Type) $ un $ Forall Index (un Type) $ un $ tvar 1 @@ tvar 0) `shouldBe` Left (UnexpectedHigherKind (Type ^> Type) (tvar 1 @@ tvar 0) Any)
 
       computeKind emptyTEnv (Forall Index (un $ Type ^> Type ^> Type) $ un $ Forall Index (un Type) $ un $ tvar 1 @@ tvar 0 @@ tvar 0) `shouldBe` return (un Type)
+
+  describe "shift" $ do
+    it "shifts variables in a type" $ do
+      shift 1 (variable 0)        `shouldBe` variable 1
+      shift 1 (global 0)          `shouldBe` global 0
+      shiftAbove 3 1 (variable 0) `shouldBe` variable 0
+      shiftAbove 0 1 (variable 0) `shouldBe` variable 1
+
+      shift 1 (tvar 0)                                  `shouldBe` tvar 1
+      shift 1 (Forall Index (un Type) $ un $ tvar 0)    `shouldBe` Forall Index (un Type) (un $ tvar 0)
+      shift 1 (Forall (Bind 1) (un Type) $ un $ tvar 0) `shouldBe` Forall (Bind 1) (un Type) (un $ tvar 1)
