@@ -46,6 +46,8 @@ module Language.Modules.RD2013.LTG
   , TEnv
   , emptyTEnv
   , fromGTEnv
+  , EqEnv
+  , emptyEqEnv
 
   -- * Errors
   , KindError(..)
@@ -418,9 +420,27 @@ findLinear tenv =
       g Nothing s  = s
       g (Just v) s = Set.insert v s
 
+newtype EqEnv = EqEnv (Map.Map Variable Type)
+  deriving (Eq, Show)
+
+instance IsList EqEnv where
+  type Item EqEnv = (Variable, Type)
+
+  fromList = coerce . Map.fromList
+  toList (EqEnv m) = Map.toList m
+
+emptyEqEnv :: EqEnv
+emptyEqEnv = EqEnv mempty
+
+lookupEqEnv :: Variable -> EqEnv -> Maybe Type
+lookupEqEnv v (EqEnv m) = Map.lookup v m
+
+extensional :: Member (Reader EqEnv) r => Variable -> Eff r (Maybe Type)
+extensional v = asks $ lookupEqEnv v
+
 data Env = Env
   { tenv :: TEnv
-  , eqenv :: Map.Map Variable Type
+  , eqenv :: EqEnv
   , venv :: Map.Map Variable MType
   }
   deriving (Eq, Show)
@@ -664,12 +684,15 @@ localize' :: (Shift a, Substitution a, Localize a) => Binder -> a -> a
 localize' Index ty    = localize ty
 localize' (Bind n) ty = subst (global n) (TVar $ variable 0) $ shift 1 $ localize ty
 
-reduce :: Type -> Type
-reduce (TApp ty1 ty2) = reduce' (reduce ty1) ty2
-reduce ty             = ty
+-- This function may not terminate since type equivalence environments are
+-- allowed to have cyclic definitions. But it's OK because undecidability of
+-- LTG does not affect decidability of MixML.
+reduce :: Member (Reader EqEnv) r => Type -> Eff r Type
+reduce (TApp ty1 ty2) = join $ reduce' <$> reduce ty1 <*> return ty2
+reduce ty @ (TVar v)  = extensional v >>= maybe (return ty) reduce
+reduce ty             = return ty
 
--- TODO: Take extensional equivalence into account.
-reduce' :: Type -> Type -> Type
+reduce' :: Member (Reader EqEnv) r => Type -> Type -> Eff r Type
 reduce' (TAbs Index _ ty1) ty2        = reduce $ substTop ty2 ty1
 reduce' ty1 @ (TAbs (Bind n) _ _) ty2 = reduce' (localize ty1) ty2
-reduce' ty1 ty2                       = TApp ty1 ty2
+reduce' ty1 ty2                       = return $ TApp ty1 ty2

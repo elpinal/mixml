@@ -6,6 +6,7 @@ import Data.Text.Prettyprint.Doc
 
 import Control.Monad.Freer
 import Control.Monad.Freer.Error
+import Control.Monad.Freer.Reader
 import Control.Monad.Freer.State
 
 import Language.Modules.RD2013.LTG
@@ -21,6 +22,9 @@ infixr 7 +>
 
 computeKind :: TEnv -> Type -> Either KindError MKind
 computeKind e = run . runError . evalState e . kindOf
+
+runEqEnv :: EqEnv -> Eff '[Reader EqEnv] a -> a
+runEqEnv e = run . runReader e
 
 tvar :: Int -> Type
 tvar = TVar . variable
@@ -288,10 +292,27 @@ spec = do
 
   describe "reduce" $ do
     it "reduces a type to its weak-head normal form (up to alpha-equivalence)" $ do
-      reduce (tvar 0)                                                                             `shouldBe` tvar 0
-      reduce (Forall Index (un Type) $ un $ tvar 0)                                               `shouldBe` (Forall Index (un Type) $ un $ tvar 0)
-      reduce (TApp (TAbs Index Type $ tvar 0) $ tvar 66)                                          `shouldBe` tvar 66
-      reduce (TApp (TAbs (Bind 6) Type $ tvar 0) $ tvar 66)                                       `shouldBe` tvar 0
-      reduce (TApp (TAbs (Bind 6) Type $ TVar $ global 6) $ tvar 66)                              `shouldBe` tvar 66
-      reduce (TApp (TAbs (Bind 6) Type $ TAbs (Bind 6) Type $ TVar $ global 6) $ tvar 66)         `shouldBe` TAbs Index Type (tvar 0)
-      reduce (TApp (TAbs (Bind 6) Type $ TAbs (Bind 9) Type $ TVar $ global 6) $ TVar $ global 9) `shouldBe` TAbs Index Type (TVar $ global 9)
+      runEqEnv emptyEqEnv (reduce $ tvar 0)                                                                             `shouldBe` tvar 0
+      runEqEnv emptyEqEnv (reduce $ Forall Index (un Type) $ un $ tvar 0)                                               `shouldBe` Forall Index (un Type) (un $ tvar 0)
+      runEqEnv emptyEqEnv (reduce $ TApp (TAbs Index Type $ tvar 0) $ tvar 66)                                          `shouldBe` tvar 66
+      runEqEnv emptyEqEnv (reduce $ TApp (TAbs (Bind 6) Type $ tvar 0) $ tvar 66)                                       `shouldBe` tvar 0
+      runEqEnv emptyEqEnv (reduce $ TApp (TAbs (Bind 6) Type $ TVar $ global 6) $ tvar 66)                              `shouldBe` tvar 66
+      runEqEnv emptyEqEnv (reduce $ TApp (TAbs (Bind 6) Type $ TAbs (Bind 6) Type $ TVar $ global 6) $ tvar 66)         `shouldBe` TAbs Index Type (tvar 0)
+      runEqEnv emptyEqEnv (reduce $ TApp (TAbs (Bind 6) Type $ TAbs (Bind 9) Type $ TVar $ global 6) $ TVar $ global 9) `shouldBe` TAbs Index Type (TVar $ global 9)
+      runEqEnv emptyEqEnv (reduce $ tvar 0 @@ (TAbs Index Type (tvar 0) @@ tvar 65))                                    `shouldBe` tvar 0 @@ (TAbs Index Type (tvar 0) @@ tvar 65)
+
+      runEqEnv [(variable 0, tvar 79)] (reduce $ tvar 0) `shouldBe` tvar 79
+
+      -- The following will not terminate as expected.
+      -- runEqEnv [(variable 0, tvar 79), (variable 79, tvar 0)] (reduce $ tvar 0) `shouldBe` tvar 79
+
+      runEqEnv [(variable 0, tvar 1), (variable 1, tvar 2)] (reduce $ tvar 0) `shouldBe` tvar 2
+      runEqEnv [(variable 0, tvar 1), (variable 1, tvar 2)] (reduce $ tvar 1) `shouldBe` tvar 2
+      runEqEnv [(variable 0, tvar 1), (variable 1, tvar 2)] (reduce $ tvar 2) `shouldBe` tvar 2
+      runEqEnv [(variable 0, tvar 1), (variable 1, tvar 2)] (reduce $ tvar 3) `shouldBe` tvar 3
+
+      runEqEnv [(variable 0, TAbs Index Type (tvar 0) @@ tvar 80)] (reduce $ tvar 0)                                `shouldBe` tvar 80
+      runEqEnv [(variable 0, TAbs Index Type (tvar 0) @@ tvar 80)] (reduce $ TAbs Index Type (tvar 1) @@ tvar 65)   `shouldBe` tvar 80
+      runEqEnv [(variable 0, TAbs Index Type $ tvar 0)] (reduce $ tvar 0 @@ tvar 65)                                `shouldBe` tvar 65
+      runEqEnv [(variable 0, TAbs Index Type $ tvar 0)] (reduce $ tvar 0 @@ (TAbs Index Type (tvar 0) @@ tvar 65))  `shouldBe` tvar 65
+      runEqEnv [(variable 0, TAbs Index Type $ tvar 0)] (reduce $ tvar 0 @@ (TAbs Index Type (tvar 33) @@ tvar 65)) `shouldBe` tvar 32
