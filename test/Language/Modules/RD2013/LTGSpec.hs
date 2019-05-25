@@ -265,3 +265,16 @@ spec = do
       shift 1 (tvar 0)                                  `shouldBe` tvar 1
       shift 1 (Forall Index (un Type) $ un $ tvar 0)    `shouldBe` Forall Index (un Type) (un $ tvar 0)
       shift 1 (Forall (Bind 1) (un Type) $ un $ tvar 0) `shouldBe` Forall (Bind 1) (un Type) (un $ tvar 1)
+
+  describe "subst" $ do
+    it "substitutes types" $ do
+      subst (variable 0) (tvar 0) (tvar 0)                               `shouldBe` tvar 0
+      subst (variable 0) (un (tvar 11) +> un (tvar 17)) (tvar 1)         `shouldBe` tvar 1
+      subst (variable 1) (un (tvar 11) +> un (tvar 17)) (tvar 1)         `shouldBe` (un (tvar 11) +> un (tvar 17))
+      subst (variable 1) (tvar 8) (Forall Index (un Type) $ un $ tvar 0) `shouldBe` (Forall Index (un Type) $ un $ tvar 0)
+      subst (variable 0) (tvar 8) (Forall Index (un Type) $ un $ tvar 0) `shouldBe` (Forall Index (un Type) $ un $ tvar 0)
+      subst (variable 0) (tvar 8) (Forall Index (un Type) $ un $ tvar 1) `shouldBe` (Forall Index (un Type) $ un $ tvar 9)
+
+      subst (global 5) (tvar 8) (Forall Index (un Type) $ un $ TVar $ global 5)             `shouldBe` (Forall Index (un Type) $ un $ tvar 9)
+      subst (global 5) (tvar 8) (Forall (Bind 5) (un Type) $ un $ TVar $ global 5)          `shouldBe` (Forall (Bind 5) (un Type) $ un $ tvar 8) -- Be careful with this behavior.
+      subst (global 5) (TVar $ global 3) (Forall (Bind 3) (un Type) $ un $ TVar $ global 5) `shouldBe` (Forall (Bind 3) (un Type) $ un $ TVar $ global 3) -- Be careful with this behavior.

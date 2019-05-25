@@ -52,6 +52,12 @@ module Language.Modules.RD2013.LTG
 
   -- * Consistency
   , Consistent(..)
+
+  -- * Substitutions
+  , Subst(..)
+  , Substitution(..)
+  , subst
+  , substTop
   ) where
 
 import Control.Monad
@@ -62,6 +68,7 @@ import Control.Monad.Freer.State
 import Data.Foldable (fold)
 import Data.Functor
 import qualified Data.Map.Strict as Map
+import Data.Maybe
 import qualified Data.Monoid
 import Data.Monoid hiding (Any)
 import Data.Semigroup hiding (Any)
@@ -92,6 +99,7 @@ lin = Moded Linear
 
 data Moded a = Moded Mode a
   deriving (Eq, Show)
+  deriving Functor
   deriving Generic
 
 instance Shift a => Shift (Moded a)
@@ -581,3 +589,47 @@ instance Used TEnv where
         f (Moded Linear _) (Moded Unrestricted _) = coerce True
         f (Moded Unrestricted _) (Moded Linear _) = error "unexpected transition from unrestricted kind to linear kind"
         f _ _                                     = coerce False
+
+newtype Subst = Subst (Map.Map Variable Type)
+
+instance IsList Subst where
+  type Item Subst = (Variable, Type)
+
+  fromList = coerce . Map.fromList
+  toList (Subst m) = Map.toList m
+
+instance Shift Subst where
+  shiftAbove c d (Subst m) = Subst $ fromList $ f <$> toList m
+    where
+      f (v, ty) = (shiftAbove c d v, shiftAbove c d ty)
+
+lookupSubst :: Variable -> Subst -> Maybe Type
+lookupSubst v (Subst m) = Map.lookup v m
+
+class Substitution a where
+  apply :: Subst -> a -> a
+
+-- Notice:
+-- * Bound global variables can be affected.
+-- * Global variables can be captured.
+instance Substitution Type where
+  apply s ty @ (TVar v)     = fromMaybe ty $ lookupSubst v s
+  apply s (TFun ty1 ty2)    = apply s ty1 `TFun` apply s ty2
+  apply s (TRecord r)       = TRecord $ apply s r
+  apply s (Forall b k ty)   = Forall b k $ apply (shift (delta b) s) ty
+  apply s (Some b k ty)     = Some b k $ apply (shift (delta b) s) ty
+  apply s (TAbs b k ty)     = TAbs b k $ apply (shift (delta b) s) ty
+  apply s (TApp ty1 ty2)    = apply s ty1 `TApp` apply s ty2
+  apply s (Ref ty)          = Ref $ apply s ty
+
+instance Substitution a => Substitution (Record a) where
+  apply s (Record m) = Record $ apply s <$> m
+
+instance Substitution a => Substitution (Moded a) where
+  apply s m = apply s <$> m
+
+subst :: Variable -> Type -> Type -> Type
+subst v by = apply $ Subst $ Map.singleton v by
+
+substTop :: Type -> Type -> Type
+substTop by = shift (-1) . subst (variable 0) (shift 1 by)

@@ -69,6 +69,7 @@ common all
   ghc-options:         -Wincomplete-patterns
   default-extensions:  ConstraintKinds
                      , DataKinds
+                     , DeriveFunctor
                      , DeriveGeneric
                      , DerivingVia
                      , FlexibleContexts
