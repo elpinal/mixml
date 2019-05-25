@@ -285,3 +285,13 @@ spec = do
   describe "localize" $ do
     it "localizes a type" $ do
       localize (Forall (Bind 3) (un Type) $ un $ tvar 0) `shouldBe` (Forall Index (un Type) $ un $ tvar 1)
+
+  describe "reduce" $ do
+    it "reduces a type to its weak-head normal form (up to alpha-equivalence)" $ do
+      reduce (tvar 0)                                                                             `shouldBe` tvar 0
+      reduce (Forall Index (un Type) $ un $ tvar 0)                                               `shouldBe` (Forall Index (un Type) $ un $ tvar 0)
+      reduce (TApp (TAbs Index Type $ tvar 0) $ tvar 66)                                          `shouldBe` tvar 66
+      reduce (TApp (TAbs (Bind 6) Type $ tvar 0) $ tvar 66)                                       `shouldBe` tvar 0
+      reduce (TApp (TAbs (Bind 6) Type $ TVar $ global 6) $ tvar 66)                              `shouldBe` tvar 66
+      reduce (TApp (TAbs (Bind 6) Type $ TAbs (Bind 6) Type $ TVar $ global 6) $ tvar 66)         `shouldBe` TAbs Index Type (tvar 0)
+      reduce (TApp (TAbs (Bind 6) Type $ TAbs (Bind 9) Type $ TVar $ global 6) $ TVar $ global 9) `shouldBe` TAbs Index Type (TVar $ global 9)

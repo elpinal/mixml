@@ -61,6 +61,9 @@ module Language.Modules.RD2013.LTG
 
   -- * Localization
   , Localize(..)
+
+  -- * Reduction
+  , reduce
   ) where
 
 import Control.Monad
@@ -660,3 +663,13 @@ instance Localize a => Localize (Moded a) where
 localize' :: (Shift a, Substitution a, Localize a) => Binder -> a -> a
 localize' Index ty    = localize ty
 localize' (Bind n) ty = subst (global n) (TVar $ variable 0) $ shift 1 $ localize ty
+
+reduce :: Type -> Type
+reduce (TApp ty1 ty2) = reduce' (reduce ty1) ty2
+reduce ty             = ty
+
+-- TODO: Take extensional equivalence into account.
+reduce' :: Type -> Type -> Type
+reduce' (TAbs Index _ ty1) ty2        = reduce $ substTop ty2 ty1
+reduce' ty1 @ (TAbs (Bind n) _ _) ty2 = reduce' (localize ty1) ty2
+reduce' ty1 ty2                       = TApp ty1 ty2
