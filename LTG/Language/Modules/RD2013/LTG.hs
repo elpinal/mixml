@@ -58,6 +58,9 @@ module Language.Modules.RD2013.LTG
   , Substitution(..)
   , subst
   , substTop
+
+  -- * Localization
+  , Localize(..)
   ) where
 
 import Control.Monad
@@ -127,6 +130,7 @@ newtype Label = Label T.Text
 
 newtype Record a = Record (Map.Map Label a)
   deriving (Eq, Show)
+  deriving Functor
   deriving Generic
 
 instance Shift a => Shift (Record a)
@@ -628,8 +632,31 @@ instance Substitution a => Substitution (Record a) where
 instance Substitution a => Substitution (Moded a) where
   apply s m = apply s <$> m
 
-subst :: Variable -> Type -> Type -> Type
+subst :: Substitution a => Variable -> Type -> a -> a
 subst v by = apply $ Subst $ Map.singleton v by
 
 substTop :: Type -> Type -> Type
 substTop by = shift (-1) . subst (variable 0) (shift 1 by)
+
+class Localize a where
+  localize :: a -> a
+
+instance Localize Type where
+  localize (TVar v)          = TVar v
+  localize (TFun ty1 ty2)    = localize ty1 `TFun` localize ty2
+  localize (TRecord r)       = TRecord $ localize r
+  localize (Forall b k ty)   = Forall Index k $ localize' b ty
+  localize (Some b k ty)     = Some Index k $ localize' b ty
+  localize (TAbs b k ty)     = TAbs Index k $ localize' b ty
+  localize (TApp ty1 ty2)    = localize ty1 `TApp` localize ty2
+  localize (Ref ty)          = Ref $ localize ty
+
+instance Localize a => Localize (Record a) where
+  localize r = localize <$> r
+
+instance Localize a => Localize (Moded a) where
+  localize m = localize <$> m
+
+localize' :: (Shift a, Substitution a, Localize a) => Binder -> a -> a
+localize' Index ty    = localize ty
+localize' (Bind n) ty = subst (global n) (TVar $ variable 0) $ shift 1 $ localize ty

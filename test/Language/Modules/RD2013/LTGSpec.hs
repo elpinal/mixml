@@ -278,3 +278,10 @@ spec = do
       subst (global 5) (tvar 8) (Forall Index (un Type) $ un $ TVar $ global 5)             `shouldBe` (Forall Index (un Type) $ un $ tvar 9)
       subst (global 5) (tvar 8) (Forall (Bind 5) (un Type) $ un $ TVar $ global 5)          `shouldBe` (Forall (Bind 5) (un Type) $ un $ tvar 8) -- Be careful with this behavior.
       subst (global 5) (TVar $ global 3) (Forall (Bind 3) (un Type) $ un $ TVar $ global 5) `shouldBe` (Forall (Bind 3) (un Type) $ un $ TVar $ global 3) -- Be careful with this behavior.
+
+      subst (global 5) (tvar 8) (localize $ Forall (Bind 5) (un Type) $ un $ TVar $ global 5)          `shouldBe` (Forall Index (un Type) $ un $ tvar 0)
+      subst (global 5) (TVar $ global 3) (localize $ Forall (Bind 3) (un Type) $ un $ TVar $ global 5) `shouldBe` (Forall Index (un Type) $ un $ TVar $ global 3)
+
+  describe "localize" $ do
+    it "localizes a type" $ do
+      localize (Forall (Bind 3) (un Type) $ un $ tvar 0) `shouldBe` (Forall Index (un Type) $ un $ tvar 1)
