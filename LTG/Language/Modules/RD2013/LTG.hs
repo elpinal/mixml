@@ -59,8 +59,10 @@ import Control.Monad.Freer
 import Control.Monad.Freer.Error
 import Control.Monad.Freer.Reader
 import Control.Monad.Freer.State
+import Data.Foldable (fold)
 import Data.Functor
 import qualified Data.Map.Strict as Map
+import qualified Data.Monoid
 import Data.Monoid hiding (Any)
 import Data.Semigroup hiding (Any)
 import qualified Data.Set as Set
@@ -539,3 +541,16 @@ withTypeBinding (Bind n) k e = do
   x <- e
   alter old n
   return x
+
+class Used a where
+  used :: a -> a -> Bool
+
+instance Used TEnv where
+  used tenv1 tenv2 = getAny $
+    fold (uncurry f <$> zip (itenv tenv1) (itenv tenv2))
+    <>
+    fold (Map.intersectionWith f (gtenv tenv1) (gtenv tenv2))
+      where
+        f (Moded Linear _) (Moded Unrestricted _) = coerce True
+        f (Moded Unrestricted _) (Moded Linear _) = error "unexpected transition from unrestricted kind to linear kind"
+        f _ _                                     = coerce False
