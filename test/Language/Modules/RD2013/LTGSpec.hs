@@ -24,6 +24,9 @@ computeKind e = run . runError . evalState e . kindOf
 tvar :: Int -> Type
 tvar = TVar . variable
 
+(@@) :: Type -> Type -> Type
+(@@) = TApp
+
 spec :: Spec
 spec = do
   describe "pretty" $ do
@@ -244,8 +247,9 @@ spec = do
       computeKind emptyTEnv (Forall Index (lin Type) $ lin $ TRecord [("a", lin $ tvar 0)])        `shouldBe` return (un Type)
       computeKind emptyTEnv (Forall Index (un $ Type ^> Type) $ un $ TRecord [("a", un $ tvar 0)]) `shouldBe` Left (UnexpectedHigherKind (Type ^> Type) (tvar 0) Any)
 
-      computeKind emptyTEnv (Forall Index (un Type) $ un $ TApp (tvar 0) $ tvar 0) `shouldBe` Left (NotHigherKind (tvar 0) (tvar 0) Any)
+      computeKind emptyTEnv (Forall Index (un Type) $ un $ tvar 0 @@ tvar 0) `shouldBe` Left (NotHigherKind (tvar 0) (tvar 0) Any)
 
-      computeKind emptyTEnv (Forall Index (un $ Type ^> Type) $ un $ Forall Index (un Type) $ un $ TApp (tvar 1) $ tvar 0)                         `shouldBe` return (un Type)
-      computeKind emptyTEnv (Forall Index (un $ Type ^> Type ^> Type) $ un $ Forall Index (un Type) $ un $ TApp (tvar 1) $ tvar 0)                 `shouldBe` Left (UnexpectedHigherKind (Type ^> Type) (TApp (tvar 1) $ tvar 0) Any)
-      computeKind emptyTEnv (Forall Index (un $ Type ^> Type ^> Type) $ un $ Forall Index (un Type) $ un $ TApp (TApp (tvar 1) $ tvar 0) $ tvar 0) `shouldBe` return (un Type)
+      computeKind emptyTEnv (Forall Index (un $ Type ^> Type) $ un $ Forall Index (un Type) $ un $ tvar 1 @@ tvar 0)         `shouldBe` return (un Type)
+      computeKind emptyTEnv (Forall Index (un $ Type ^> Type ^> Type) $ un $ Forall Index (un Type) $ un $ tvar 1 @@ tvar 0) `shouldBe` Left (UnexpectedHigherKind (Type ^> Type) (tvar 1 @@ tvar 0) Any)
+
+      computeKind emptyTEnv (Forall Index (un $ Type ^> Type ^> Type) $ un $ Forall Index (un Type) $ un $ tvar 1 @@ tvar 0 @@ tvar 0) `shouldBe` return (un Type)
