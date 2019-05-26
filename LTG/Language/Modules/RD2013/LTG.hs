@@ -523,9 +523,10 @@ instance Evidential KindError where
   evidence = EvidKind
 
 instance Pretty KindError where
-  pretty (UnexpectedLinearKind ty env)   = "expected unrestricted kind, but got linear kind for" <+> run (runReader (fromCTEnv env) $ prettyEnv0 ty)
-  pretty (UnexpectedHigherKind k ty env) = "unexpected higher kind:" <+> pretty (Prec k) <> ", which is kind of" <+> run (runReader (fromCTEnv env) $ prettyEnv0 ty)
-  pretty (UnboundTypeVariable v)         = "unbound type variable:" <+> pretty (show v)
+  pretty (UnexpectedLinearKind ty env)        = "expected unrestricted kind, but got linear kind for" <+> run (runReader (fromCTEnv env) $ prettyEnv0 ty)
+  pretty (UnexpectedHigherKind k ty env)      = "unexpected higher kind:" <+> pretty (Prec k) <> ", which is kind of" <+> run (runReader (fromCTEnv env) $ prettyEnv0 ty)
+  pretty (UnusedTypeVariableWithLinearKind k) = "unused type variable with kind:" <+> pretty (Prec $ lin k)
+  pretty (UnboundTypeVariable v)              = "unbound type variable:" <+> pretty (show v)
 
 type WithTEnvError r = Members '[State TEnv, Error Failure] r
 
@@ -830,6 +831,15 @@ instance Typed Term where
   typeOf (New ty) = do
     unType ty
     return $ lin $ Ref ty
+  typeOf (Poly b k t) = do
+    tenv1 <- get
+    -- TODO: consider venv
+    ty <- withTypeBinding b k $ typeOf t
+    tenv2 <- get
+    let m = if used tenv1 (tenv2 :: TEnv)
+              then lin
+              else un
+    return $ m $ Forall b k ty
 
 whTypeOf :: (Typed a, WithEnvError r) => a -> Eff r MType
 whTypeOf t = typeOf t >>= f

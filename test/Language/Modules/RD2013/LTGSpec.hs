@@ -344,3 +344,7 @@ spec = do
       computeType (New $ Forall Index (un Type) $ un $ tvar 0)       `shouldBeRight` lin (Ref $ Forall Index (un Type) $ un $ tvar 0)
       computeType (New $ Forall (Bind 8) (un Type) $ un $ tglobal 8) `shouldBeRight` lin (Ref $ Forall (Bind 8) (un Type) $ un $ tglobal 8)
       computeType (New $ Forall Index (lin Type) $ lin $ tvar 0)     `shouldBeRight` lin (Ref $ Forall Index (lin Type) $ lin $ tvar 0)
+
+      computeType (Poly Index (lin Type) $ New $ tvar 0)                        `shouldBeKindError` UnexpectedLinearKind (tvar 0) Any
+      computeType (Poly Index (un Type) $ New $ tvar 0)                         `shouldBeRight` un (Forall Index (un Type) (lin $ Ref $ tvar 0))
+      computeType (Poly Index (lin Type) $ Poly Index (un Type) $ New $ tvar 0) `shouldBeKindError` UnusedTypeVariableWithLinearKind Type
