@@ -72,8 +72,10 @@ common all
                      , DeriveFunctor
                      , DeriveGeneric
                      , DerivingVia
+                     , ExistentialQuantification
                      , FlexibleContexts
                      , FlexibleInstances
+                     , GADTs
                      , GeneralizedNewtypeDeriving
                      , OverloadedLists
                      , OverloadedStrings

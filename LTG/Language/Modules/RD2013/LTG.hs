@@ -91,6 +91,7 @@ import qualified Data.Set as Set
 import Data.String
 import qualified Data.Text as T
 import Data.Text.Prettyprint.Doc
+import Data.Text.Prettyprint.Doc.Render.Text
 import GHC.Exts
 import GHC.Generics
 
@@ -478,6 +479,17 @@ instance Show a => Show (Consistent a) where
 
 type CTEnv = Consistent TEnv
 
+data Failure = forall a. Failure a (Evidence a) (a -> LayoutOptions -> T.Text)
+
+data Evidence a where
+  EvidKind :: Evidence KindError
+
+class Evidential a where
+  evidence :: Evidence a
+
+throwFailure :: (Member (Error Failure) r, Evidential a, Pretty a) => a -> Eff r b
+throwFailure x = throwError $ Failure x evidence (\y opt -> renderStrict $ layoutSmart opt $ pretty y)
+
 data KindError
   = UnexpectedLinearKind Type CTEnv
   | UnexpectedHigherKind Kind Type CTEnv
@@ -493,6 +505,9 @@ data KindError
   | MissingLabelR Label (Record MType) (Record MType) CTEnv
   | ModeMismatch Mode Mode Type Type CTEnv
   deriving (Eq, Show)
+
+instance Evidential KindError where
+  evidence = EvidKind
 
 type WithTEnvError r = Members '[State TEnv, Error KindError] r
 
