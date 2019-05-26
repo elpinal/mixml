@@ -103,6 +103,16 @@ library ltg
   ghc-options:         -Wno-simplifiable-class-constraints
 
 
+library test-template
+  import:              all
+  build-depends:       base
+                     , ltg
+                     , template-haskell >= 2.14.0.0
+                     , text
+  exposed-modules:     Test.Template
+  hs-source-dirs:      template
+
+
 test-suite test-mixml
   import:              all
   type:                exitcode-stdio-1.0
@@ -110,9 +120,11 @@ test-suite test-mixml
   build-depends:       base
                      , ltg
                      , shift
+                     , test-template
                      , hspec >= 2.7.1
                      , freer-simple
                      , prettyprinter
+                     , text
   other-modules:       Language.Modules.RD2013.LTGSpec
   hs-source-dirs:      test
 

@@ -1,3 +1,5 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module Language.Modules.RD2013.LTGSpec where
 
 import Test.Hspec
@@ -8,9 +10,12 @@ import Control.Monad.Freer
 import Control.Monad.Freer.Error
 import Control.Monad.Freer.Reader
 import Control.Monad.Freer.State
+import qualified Data.Text as T
 
 import Language.Modules.RD2013.LTG
 import Shift
+
+import Test.Template
 
 infixr 7 ^>
 (^>) :: Kind -> Kind -> Kind
@@ -20,7 +25,13 @@ infixr 7 +>
 (+>) :: MType -> MType -> Type
 (+>) = TFun
 
-computeKind :: TEnv -> Type -> Either KindError MKind
+shouldBeRight :: (HasCallStack, Eq a, Show a) => Either Failure a -> a -> Expectation
+shouldBeRight (Left (Failure err _ f)) _ = expectationFailure $ T.unpack $ "error: " <> f err defaultLayoutOptions
+shouldBeRight (Right x) expected         = x `shouldBe` expected
+
+mkShouldBeError ''KindError 'EvidKind
+
+computeKind :: TEnv -> Type -> Either Failure MKind
 computeKind e = run . runError . evalState e . kindOf
 
 runEqEnv :: EqEnv -> Eff '[Reader EqEnv] a -> a
@@ -213,45 +224,45 @@ spec = do
 
   describe "kindOf" $ do
     it "computes a kind for a type" $ do
-      computeKind emptyTEnv (tvar 0)                                  `shouldBe` Left (UnboundTypeVariable $ variable 0)
-      computeKind emptyTEnv (Forall Index (un Type) $ un $ tvar 0)    `shouldBe` return (un Type)
-      computeKind emptyTEnv (Forall Index (lin Type) $ un $ tvar 0)   `shouldBe` return (un Type)
-      computeKind emptyTEnv (Forall Index (un Type) $ un $ tvar 1)    `shouldBe` Left (UnboundTypeVariable $ variable 1)
-      computeKind emptyTEnv (Forall (Bind 0) (un Type) $ un $ tvar 0) `shouldBe` Left (UnboundTypeVariable $ variable 0)
+      computeKind emptyTEnv (tvar 0)                                  `shouldBeKindError` (UnboundTypeVariable $ variable 0)
+      computeKind emptyTEnv (Forall Index (un Type) $ un $ tvar 0)    `shouldBeRight` (un Type)
+      computeKind emptyTEnv (Forall Index (lin Type) $ un $ tvar 0)   `shouldBeRight` (un Type)
+      computeKind emptyTEnv (Forall Index (un Type) $ un $ tvar 1)    `shouldBeKindError` (UnboundTypeVariable $ variable 1)
+      computeKind emptyTEnv (Forall (Bind 0) (un Type) $ un $ tvar 0) `shouldBeKindError` (UnboundTypeVariable $ variable 0)
 
-      computeKind emptyTEnv (Forall Index (lin Type) $ un $ Forall Index (lin $ Type ^> Type) $ un $ tvar 1) `shouldBe` return (un Type)
-      computeKind emptyTEnv (Forall Index (lin Type) $ un $ Forall Index (lin $ Type ^> Type) $ un $ tvar 0) `shouldBe` Left (UnexpectedHigherKind (Type ^> Type) (tvar 0) Any)
+      computeKind emptyTEnv (Forall Index (lin Type) $ un $ Forall Index (lin $ Type ^> Type) $ un $ tvar 1) `shouldBeRight` (un Type)
+      computeKind emptyTEnv (Forall Index (lin Type) $ un $ Forall Index (lin $ Type ^> Type) $ un $ tvar 0) `shouldBeKindError` (UnexpectedHigherKind (Type ^> Type) (tvar 0) Any)
 
-      computeKind emptyTEnv (Forall Index (un Type) $ un $ un (tvar 0) +> un (tvar 0))  `shouldBe` return (un Type)
-      computeKind emptyTEnv (Forall Index (lin Type) $ un $ un (tvar 0) +> un (tvar 0)) `shouldBe` return (un Type)
+      computeKind emptyTEnv (Forall Index (un Type) $ un $ un (tvar 0) +> un (tvar 0))  `shouldBeRight` (un Type)
+      computeKind emptyTEnv (Forall Index (lin Type) $ un $ un (tvar 0) +> un (tvar 0)) `shouldBeRight` (un Type)
 
-      computeKind (fromGTEnv [(0, lin Type)]) (TVar $ global 0)                                            `shouldBe` return (lin Type)
-      computeKind (fromGTEnv [(0, lin Type)]) (un (TVar $ global 0) +> un (TVar $ global 0))               `shouldBe` Left (UnexpectedLinearKind (TVar $ global 0) Any)
-      computeKind (fromGTEnv [(0, lin Type), (8, un Type)]) (un (TVar $ global 8) +> un (TVar $ global 0)) `shouldBe` Left (UnexpectedLinearKind (TVar $ global 0) Any)
+      computeKind (fromGTEnv [(0, lin Type)]) (TVar $ global 0)                                            `shouldBeRight` (lin Type)
+      computeKind (fromGTEnv [(0, lin Type)]) (un (TVar $ global 0) +> un (TVar $ global 0))               `shouldBeKindError` (UnexpectedLinearKind (TVar $ global 0) Any)
+      computeKind (fromGTEnv [(0, lin Type), (8, un Type)]) (un (TVar $ global 8) +> un (TVar $ global 0)) `shouldBeKindError` (UnexpectedLinearKind (TVar $ global 0) Any)
 
-      computeKind emptyTEnv (Some Index (un Type) $ un $ tvar 0) `shouldBe` return (un Type)
+      computeKind emptyTEnv (Some Index (un Type) $ un $ tvar 0) `shouldBeRight` (un Type)
 
-      computeKind emptyTEnv (TAbs Index Type $ tvar 0)                       `shouldBe` return (un $ Type ^> Type)
-      computeKind emptyTEnv (TAbs Index Type $ un (tvar 0) +> un (tvar 0))   `shouldBe` return (un $ Type ^> Type)
-      computeKind emptyTEnv (TAbs Index Type $ lin (tvar 0) +> lin (tvar 0)) `shouldBe` return (un $ Type ^> Type)
+      computeKind emptyTEnv (TAbs Index Type $ tvar 0)                       `shouldBeRight` (un $ Type ^> Type)
+      computeKind emptyTEnv (TAbs Index Type $ un (tvar 0) +> un (tvar 0))   `shouldBeRight` (un $ Type ^> Type)
+      computeKind emptyTEnv (TAbs Index Type $ lin (tvar 0) +> lin (tvar 0)) `shouldBeRight` (un $ Type ^> Type)
 
-      computeKind emptyTEnv (TAbs Index (Type ^> Type) $ tvar 0) `shouldBe` return (un $ (Type ^> Type) ^> Type ^> Type)
+      computeKind emptyTEnv (TAbs Index (Type ^> Type) $ tvar 0) `shouldBeRight` (un $ (Type ^> Type) ^> Type ^> Type)
 
-      computeKind emptyTEnv (TAbs Index Type $ TAbs Index Type $ tvar 0)           `shouldBe` return (un $ Type ^> Type ^> Type)
-      computeKind emptyTEnv (TAbs Index Type $ TAbs Index (Type ^> Type) $ tvar 0) `shouldBe` return (un $ Type ^> (Type ^> Type) ^> Type ^> Type)
-      computeKind emptyTEnv (TAbs Index Type $ TAbs Index (Type ^> Type) $ tvar 1) `shouldBe` return (un $ Type ^> (Type ^> Type) ^> Type)
+      computeKind emptyTEnv (TAbs Index Type $ TAbs Index Type $ tvar 0)           `shouldBeRight` (un $ Type ^> Type ^> Type)
+      computeKind emptyTEnv (TAbs Index Type $ TAbs Index (Type ^> Type) $ tvar 0) `shouldBeRight` (un $ Type ^> (Type ^> Type) ^> Type ^> Type)
+      computeKind emptyTEnv (TAbs Index Type $ TAbs Index (Type ^> Type) $ tvar 1) `shouldBeRight` (un $ Type ^> (Type ^> Type) ^> Type)
 
-      computeKind emptyTEnv (Forall Index (un Type) $ un $ TRecord [])                             `shouldBe` return (un Type)
-      computeKind emptyTEnv (Forall Index (un Type) $ un $ TRecord [("a", un $ tvar 0)])           `shouldBe` return (un Type)
-      computeKind emptyTEnv (Forall Index (lin Type) $ lin $ TRecord [("a", lin $ tvar 0)])        `shouldBe` return (un Type)
-      computeKind emptyTEnv (Forall Index (un $ Type ^> Type) $ un $ TRecord [("a", un $ tvar 0)]) `shouldBe` Left (UnexpectedHigherKind (Type ^> Type) (tvar 0) Any)
+      computeKind emptyTEnv (Forall Index (un Type) $ un $ TRecord [])                             `shouldBeRight` (un Type)
+      computeKind emptyTEnv (Forall Index (un Type) $ un $ TRecord [("a", un $ tvar 0)])           `shouldBeRight` (un Type)
+      computeKind emptyTEnv (Forall Index (lin Type) $ lin $ TRecord [("a", lin $ tvar 0)])        `shouldBeRight` (un Type)
+      computeKind emptyTEnv (Forall Index (un $ Type ^> Type) $ un $ TRecord [("a", un $ tvar 0)]) `shouldBeKindError` (UnexpectedHigherKind (Type ^> Type) (tvar 0) Any)
 
-      computeKind emptyTEnv (Forall Index (un Type) $ un $ tvar 0 @@ tvar 0) `shouldBe` Left (NotHigherKind (tvar 0) (tvar 0) Any)
+      computeKind emptyTEnv (Forall Index (un Type) $ un $ tvar 0 @@ tvar 0) `shouldBeKindError` (NotHigherKind (tvar 0) (tvar 0) Any)
 
-      computeKind emptyTEnv (Forall Index (un $ Type ^> Type) $ un $ Forall Index (un Type) $ un $ tvar 1 @@ tvar 0)         `shouldBe` return (un Type)
-      computeKind emptyTEnv (Forall Index (un $ Type ^> Type ^> Type) $ un $ Forall Index (un Type) $ un $ tvar 1 @@ tvar 0) `shouldBe` Left (UnexpectedHigherKind (Type ^> Type) (tvar 1 @@ tvar 0) Any)
+      computeKind emptyTEnv (Forall Index (un $ Type ^> Type) $ un $ Forall Index (un Type) $ un $ tvar 1 @@ tvar 0)         `shouldBeRight` (un Type)
+      computeKind emptyTEnv (Forall Index (un $ Type ^> Type ^> Type) $ un $ Forall Index (un Type) $ un $ tvar 1 @@ tvar 0) `shouldBeKindError` (UnexpectedHigherKind (Type ^> Type) (tvar 1 @@ tvar 0) Any)
 
-      computeKind emptyTEnv (Forall Index (un $ Type ^> Type ^> Type) $ un $ Forall Index (un Type) $ un $ tvar 1 @@ tvar 0 @@ tvar 0) `shouldBe` return (un Type)
+      computeKind emptyTEnv (Forall Index (un $ Type ^> Type ^> Type) $ un $ Forall Index (un Type) $ un $ tvar 1 @@ tvar 0 @@ tvar 0) `shouldBeRight` (un Type)
 
   describe "shift" $ do
     it "shifts variables in a type" $ do
@@ -313,8 +324,8 @@ spec = do
 
   describe "equalType" $ do
     it "tests whether two types (of the 'type' kind) are equivalent" $ do
-      equalType (Forall Index (un Type) $ un $ tvar 0) (Forall Index (un Type) $ un $ tvar 0)    `shouldBe` return ()
-      equalType (Forall Index (lin Type) $ un $ tvar 0) (Forall Index (un Type) $ un $ tvar 0)   `shouldBe` Left (ModedKindMismatch (lin Type) (un Type) Any)
-      equalType (Forall Index (lin Type) $ un $ tvar 0) (Forall Index (lin Type) $ lin $ tvar 0) `shouldBe` Left (ModeMismatch Unrestricted Linear (tvar 0) (tvar 0) Any)
+      equalType (Forall Index (un Type) $ un $ tvar 0) (Forall Index (un Type) $ un $ tvar 0)    `shouldBeRight` ()
+      equalType (Forall Index (lin Type) $ un $ tvar 0) (Forall Index (un Type) $ un $ tvar 0)   `shouldBeKindError` (ModedKindMismatch (lin Type) (un Type) Any)
+      equalType (Forall Index (lin Type) $ un $ tvar 0) (Forall Index (lin Type) $ lin $ tvar 0) `shouldBeKindError` (ModeMismatch Unrestricted Linear (tvar 0) (tvar 0) Any)
 
-      equalType (Forall Index (un Type) $ un $ tvar 0) (Forall Index (un Type) $ un $ TAbs Index Type (tvar 0) @@ tvar 0) `shouldBe` return ()
+      equalType (Forall Index (un Type) $ un $ tvar 0) (Forall Index (un Type) $ un $ TAbs Index Type (tvar 0) @@ tvar 0) `shouldBeRight` ()

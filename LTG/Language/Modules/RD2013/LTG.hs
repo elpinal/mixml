@@ -51,6 +51,10 @@ module Language.Modules.RD2013.LTG
   , EqEnv
   , emptyEqEnv
 
+  -- * Failure
+  , Failure(..)
+  , Evidence(..)
+
   -- * Errors
   , KindError(..)
 
@@ -216,6 +220,10 @@ nameEnv = NameEnv
   { vdepth = 0
   , tdepth = 0
   }
+
+fromCTEnv :: CTEnv -> NameEnv
+fromCTEnv (Consistent tenv) = nameEnv { tdepth = length $ itenv tenv }
+fromCTEnv Any               = error "unexpected Any"
 
 incValueDepth :: NameEnv -> NameEnv
 incValueDepth nenv = nenv { vdepth = vdepth nenv + 1 }
@@ -509,12 +517,15 @@ data KindError
 instance Evidential KindError where
   evidence = EvidKind
 
-type WithTEnvError r = Members '[State TEnv, Error KindError] r
+instance Pretty KindError where
+  pretty (UnexpectedLinearKind ty env) = "expected unrestricted kind, but got linear kind for" <+> run (runReader (fromCTEnv env) $ prettyEnv0 ty)
 
-throw :: WithTEnvError r => (CTEnv -> KindError) -> Eff r a
+type WithTEnvError r = Members '[State TEnv, Error Failure] r
+
+throw :: (WithTEnvError r, Evidential e, Pretty e) => (CTEnv -> e) -> Eff r a
 throw f = do
   tenv <- get
-  throwError $ f $ Consistent tenv
+  throwFailure $ f $ Consistent tenv
 
 unType :: (Kinded a, WithTEnvError r) => a -> Eff r ()
 unType ty = do
@@ -528,12 +539,12 @@ unType ty = do
 (x : _) !? 0  = Just x
 (_ : xs) !? n = xs !? (n - 1)
 
-close :: Member (Error KindError) r => TEnv -> Eff (State TEnv ': r) a -> Eff r a
+close :: Member (Error Failure) r => TEnv -> Eff (State TEnv ': r) a -> Eff r a
 close tenv e = do
   (x, tenv) <- runState tenv e
   let set = findLinear tenv
   when (not $ Set.null set) $
-    throwError $ UnusedTypeVariables set $ Consistent tenv
+    throwFailure $ UnusedTypeVariables set $ Consistent tenv
   return x
 
 class Kinded a where
@@ -551,11 +562,11 @@ instance Kinded Variable where
 
   kindOf v @ (Global n) = do
     tenv <- gets gtenv
-    maybe (throwError $ UnboundTypeVariable v) return $ Map.lookup n tenv
+    maybe (throwFailure $ UnboundTypeVariable v) return $ Map.lookup n tenv
 
   kindOf v @ (Variable n) = do
     tenv <- gets itenv
-    maybe (throwError $ UnboundTypeVariable v) return $ tenv !? n
+    maybe (throwFailure $ UnboundTypeVariable v) return $ tenv !? n
 
 instance Kinded Type where
   toType = id
@@ -601,7 +612,7 @@ alter :: WithTEnvError r => Maybe MKind -> Int -> Eff r ()
 alter old n = do
   tenv <- gets gtenv
   case Map.lookup n tenv of
-    Just (Moded Linear k) -> throwError $ UnusedTypeVariableWithLinearKind k
+    Just (Moded Linear k) -> throwFailure $ UnusedTypeVariableWithLinearKind k
     _                     -> return ()
   modify $ replaceGTEnv $ Map.update (\_ -> old) n tenv
 
@@ -611,7 +622,7 @@ replaceGTEnv m tenv = tenv { gtenv = m }
 replaceITEnv :: [MKind] -> TEnv -> TEnv
 replaceITEnv xs tenv = tenv { itenv = xs }
 
-uncons []       = throwError EmptyITEnv
+uncons []       = throwFailure EmptyITEnv
 uncons (x : xs) = return $ (x, xs)
 
 push :: Member (State TEnv) r => MKind -> Eff r ()
@@ -625,7 +636,7 @@ pop = do
   (x, xs) <- uncons tenv
   modify $ replaceITEnv xs
   case x of
-    Moded Linear k -> throwError $ UnusedTypeVariableWithLinearKind k
+    Moded Linear k -> throwFailure $ UnusedTypeVariableWithLinearKind k
     _              -> return ()
 
 withTypeBinding :: WithTEnvError r => Binder -> MKind -> Eff r a -> Eff r a
@@ -782,5 +793,5 @@ instance BetaEtaEq MType where
     | otherwise = throw $ ModeMismatch m1 m2 ty1 ty2
 
 -- Assumes input types have the 'type' kind.
-equalType :: Type -> Type -> Either KindError ()
+equalType :: Type -> Type -> Either Failure ()
 equalType ty1 ty2 = run $ runError $ runReader emptyEqEnv $ evalState emptyTEnv $ equal ty1 ty2 Type
