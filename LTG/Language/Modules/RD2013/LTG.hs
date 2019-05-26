@@ -806,6 +806,8 @@ equalType ty1 ty2 = run $ runError $ runReader emptyEqEnv $ evalState emptyTEnv 
 
 data TypeError
   = NotFunction Type Term Term CTEnv
+  | NotRef Type Term CTEnv
+  | NotUn Type Term CTEnv
   deriving (Eq, Show)
 
 instance Evidential TypeError where
@@ -840,6 +842,12 @@ instance Typed Term where
               then lin
               else un
     return $ m $ Forall b k ty
+  typeOf (Read t) = do
+    ty <- typeOf t
+    case ty of
+      Moded Unrestricted (Ref ty) -> return $ un ty
+      Moded Unrestricted ty       -> throw $ NotRef ty t
+      Moded Linear ty             -> throw $ NotUn ty t
 
 whTypeOf :: (Typed a, WithEnvError r) => a -> Eff r MType
 whTypeOf t = typeOf t >>= f
