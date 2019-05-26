@@ -30,12 +30,19 @@ shouldBeRight (Left (Failure err _ f)) _ = expectationFailure $ T.unpack $ "erro
 shouldBeRight (Right x) expected         = x `shouldBe` expected
 
 mkShouldBeError ''KindError 'EvidKind
+mkShouldBeError ''TypeError 'EvidType
 
 computeKind :: TEnv -> Type -> Either Failure MKind
 computeKind e = run . runError . evalState e . kindOf
 
+computeType :: Term -> Either Failure MType
+computeType = run . runError . runReader emptyEqEnv . evalState emptyTEnv . typeOf
+
 runEqEnv :: EqEnv -> Eff '[Reader EqEnv] a -> a
 runEqEnv e = run . runReader e
+
+tglobal :: Int -> Type
+tglobal = TVar . global
 
 spec :: Spec
 spec = do
@@ -329,3 +336,11 @@ spec = do
       equalType (Forall Index (lin Type) $ un $ tvar 0) (Forall Index (lin Type) $ lin $ tvar 0) `shouldBeKindError` (ModeMismatch Unrestricted Linear (tvar 0) (tvar 0) Any)
 
       equalType (Forall Index (un Type) $ un $ tvar 0) (Forall Index (un Type) $ un $ TAbs Index Type (tvar 0) @@ tvar 0) `shouldBeRight` ()
+
+  describe "typeOf" $ do
+    it "computes a type for a term" $ do
+      computeType (New $ tvar 0)                                     `shouldBeKindError` UnboundTypeVariable (variable 0)
+      computeType (New $ TAbs Index Type $ tvar 0)                   `shouldBeKindError` UnexpectedHigherKind (Type ^> Type) (TAbs Index Type $ tvar 0) Any
+      computeType (New $ Forall Index (un Type) $ un $ tvar 0)       `shouldBeRight` lin (Ref $ Forall Index (un Type) $ un $ tvar 0)
+      computeType (New $ Forall (Bind 8) (un Type) $ un $ tglobal 8) `shouldBeRight` lin (Ref $ Forall (Bind 8) (un Type) $ un $ tglobal 8)
+      computeType (New $ Forall Index (lin Type) $ lin $ tvar 0)     `shouldBeRight` lin (Ref $ Forall Index (lin Type) $ lin $ tvar 0)

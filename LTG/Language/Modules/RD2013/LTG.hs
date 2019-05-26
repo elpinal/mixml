@@ -44,6 +44,9 @@ module Language.Modules.RD2013.LTG
   -- * Kinding
   , Kinded(..)
 
+  -- * Typing
+  , Typed(..)
+
   -- * Environments
   , TEnv
   , emptyTEnv
@@ -57,6 +60,7 @@ module Language.Modules.RD2013.LTG
 
   -- * Errors
   , KindError(..)
+  , TypeError(..)
 
   -- * Consistency
   , Consistent(..)
@@ -491,6 +495,7 @@ data Failure = forall a. Failure a (Evidence a) (a -> LayoutOptions -> T.Text)
 
 data Evidence a where
   EvidKind :: Evidence KindError
+  EvidType :: Evidence TypeError
 
 class Evidential a where
   evidence :: Evidence a
@@ -518,7 +523,9 @@ instance Evidential KindError where
   evidence = EvidKind
 
 instance Pretty KindError where
-  pretty (UnexpectedLinearKind ty env) = "expected unrestricted kind, but got linear kind for" <+> run (runReader (fromCTEnv env) $ prettyEnv0 ty)
+  pretty (UnexpectedLinearKind ty env)   = "expected unrestricted kind, but got linear kind for" <+> run (runReader (fromCTEnv env) $ prettyEnv0 ty)
+  pretty (UnexpectedHigherKind k ty env) = "unexpected higher kind:" <+> pretty (Prec k) <> ", which is kind of" <+> run (runReader (fromCTEnv env) $ prettyEnv0 ty)
+  pretty (UnboundTypeVariable v)         = "unbound type variable:" <+> pretty (show v)
 
 type WithTEnvError r = Members '[State TEnv, Error Failure] r
 
@@ -795,3 +802,36 @@ instance BetaEtaEq MType where
 -- Assumes input types have the 'type' kind.
 equalType :: Type -> Type -> Either Failure ()
 equalType ty1 ty2 = run $ runError $ runReader emptyEqEnv $ evalState emptyTEnv $ equal ty1 ty2 Type
+
+data TypeError
+  = NotFunction Type Term Term CTEnv
+  deriving (Eq, Show)
+
+instance Evidential TypeError where
+  evidence = EvidType
+
+instance Pretty TypeError where
+  pretty (NotFunction ty1 t1 t2 env) = "not function type:" <+> run (runReader (fromCTEnv env) $ prettyEnv0 ty1)
+
+type WithEnvError r = (WithTEnvError r, Members '[Reader EqEnv] r)
+
+class Typed a where
+  typeOf :: WithEnvError r => a -> Eff r MType
+
+instance Typed Term where
+  typeOf (App t1 t2) = do
+    ty1 <- fromModed <$> whTypeOf t1
+    ty2 <- typeOf t2
+    case ty1 of
+      TFun ty11 ty12 -> do
+        equal ty11 ty2 Type
+        return ty12
+      _ -> throw $ NotFunction ty1 t1 t2
+  typeOf (New ty) = do
+    unType ty
+    return $ lin $ Ref ty
+
+whTypeOf :: (Typed a, WithEnvError r) => a -> Eff r MType
+whTypeOf t = typeOf t >>= f
+  where
+    f (Moded m ty) = Moded m <$> reduce ty
