@@ -347,4 +347,4 @@ spec = do
 
       computeType (Poly Index (lin Type) $ New $ tvar 0)                        `shouldBeKindError` UnexpectedLinearKind (tvar 0) Any
       computeType (Poly Index (un Type) $ New $ tvar 0)                         `shouldBeRight` un (Forall Index (un Type) (lin $ Ref $ tvar 0))
-      computeType (Poly Index (lin Type) $ Poly Index (un Type) $ New $ tvar 0) `shouldBeKindError` UnusedTypeVariableWithLinearKind Type
+      computeType (Poly Index (lin Type) $ Poly Index (un Type) $ New $ tvar 0) `shouldBeKindError` UnusedTypeVariable Type (variable 0)

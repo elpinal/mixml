@@ -506,7 +506,7 @@ throwFailure x = throwError $ Failure x evidence (\y opt -> renderStrict $ layou
 data KindError
   = UnexpectedLinearKind Type CTEnv
   | UnexpectedHigherKind Kind Type CTEnv
-  | UnusedTypeVariableWithLinearKind Kind
+  | UnusedTypeVariable Kind Variable
   | EmptyITEnv
   | UnboundTypeVariable Variable
   | UnusedTypeVariables (Set.Set Variable) CTEnv
@@ -523,10 +523,10 @@ instance Evidential KindError where
   evidence = EvidKind
 
 instance Pretty KindError where
-  pretty (UnexpectedLinearKind ty env)        = "expected unrestricted kind, but got linear kind for" <+> run (runReader (fromCTEnv env) $ prettyEnv0 ty)
-  pretty (UnexpectedHigherKind k ty env)      = "unexpected higher kind:" <+> pretty (Prec k) <> ", which is kind of" <+> run (runReader (fromCTEnv env) $ prettyEnv0 ty)
-  pretty (UnusedTypeVariableWithLinearKind k) = "unused type variable with kind:" <+> pretty (Prec $ lin k)
-  pretty (UnboundTypeVariable v)              = "unbound type variable:" <+> pretty (show v)
+  pretty (UnexpectedLinearKind ty env)   = "expected unrestricted kind, but got linear kind for" <+> run (runReader (fromCTEnv env) $ prettyEnv0 ty)
+  pretty (UnexpectedHigherKind k ty env) = "unexpected higher kind:" <+> pretty (Prec k) <> ", which is kind of" <+> run (runReader (fromCTEnv env) $ prettyEnv0 ty)
+  pretty (UnusedTypeVariable k v)        = "unused type variable (" <> pretty (show v) <> ") with kind:" <+> pretty (Prec $ lin k)
+  pretty (UnboundTypeVariable v)         = "unbound type variable:" <+> pretty (show v)
 
 type WithTEnvError r = Members '[State TEnv, Error Failure] r
 
@@ -620,7 +620,7 @@ alter :: WithTEnvError r => Maybe MKind -> Int -> Eff r ()
 alter old n = do
   tenv <- gets gtenv
   case Map.lookup n tenv of
-    Just (Moded Linear k) -> throwFailure $ UnusedTypeVariableWithLinearKind k
+    Just (Moded Linear k) -> throwFailure $ UnusedTypeVariable k $ global n
     _                     -> return ()
   modify $ replaceGTEnv $ Map.update (\_ -> old) n tenv
 
@@ -644,7 +644,7 @@ pop = do
   (x, xs) <- uncons tenv
   modify $ replaceITEnv xs
   case x of
-    Moded Linear k -> throwFailure $ UnusedTypeVariableWithLinearKind k
+    Moded Linear k -> throwFailure $ UnusedTypeVariable k $ variable 0
     _              -> return ()
 
 withTypeBinding :: WithTEnvError r => Binder -> MKind -> Eff r a -> Eff r a
