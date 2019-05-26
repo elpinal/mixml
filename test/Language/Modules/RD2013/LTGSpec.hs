@@ -26,12 +26,6 @@ computeKind e = run . runError . evalState e . kindOf
 runEqEnv :: EqEnv -> Eff '[Reader EqEnv] a -> a
 runEqEnv e = run . runReader e
 
-tvar :: Int -> Type
-tvar = TVar . variable
-
-(@@) :: Type -> Type -> Type
-(@@) = TApp
-
 spec :: Spec
 spec = do
   describe "pretty" $ do
@@ -316,3 +310,11 @@ spec = do
       runEqEnv [(variable 0, TAbs Index Type $ tvar 0)] (reduce $ tvar 0 @@ tvar 65)                                `shouldBe` tvar 65
       runEqEnv [(variable 0, TAbs Index Type $ tvar 0)] (reduce $ tvar 0 @@ (TAbs Index Type (tvar 0) @@ tvar 65))  `shouldBe` tvar 65
       runEqEnv [(variable 0, TAbs Index Type $ tvar 0)] (reduce $ tvar 0 @@ (TAbs Index Type (tvar 33) @@ tvar 65)) `shouldBe` tvar 32
+
+  describe "equalType" $ do
+    it "tests whether two types (of the 'type' kind) are equivalent" $ do
+      equalType (Forall Index (un Type) $ un $ tvar 0) (Forall Index (un Type) $ un $ tvar 0)    `shouldBe` return ()
+      equalType (Forall Index (lin Type) $ un $ tvar 0) (Forall Index (un Type) $ un $ tvar 0)   `shouldBe` Left (ModedKindMismatch (lin Type) (un Type) Any)
+      equalType (Forall Index (lin Type) $ un $ tvar 0) (Forall Index (lin Type) $ lin $ tvar 0) `shouldBe` Left (ModeMismatch Unrestricted Linear (tvar 0) (tvar 0) Any)
+
+      equalType (Forall Index (un Type) $ un $ tvar 0) (Forall Index (un Type) $ un $ TAbs Index Type (tvar 0) @@ tvar 0) `shouldBe` return ()

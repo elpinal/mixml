@@ -27,6 +27,8 @@ module Language.Modules.RD2013.LTG
   -- * Types
   , Type(..)
   , MType
+  , tvar
+  , (@@)
 
   -- * Terms
   , Term(..)
@@ -66,6 +68,10 @@ module Language.Modules.RD2013.LTG
 
   -- * Reduction
   , reduce
+
+  -- * Beta-eta equivalence
+  , BetaEtaEq(..)
+  , equalType
   ) where
 
 import Control.Monad
@@ -75,6 +81,7 @@ import Control.Monad.Freer.Reader
 import Control.Monad.Freer.State
 import Data.Foldable (fold)
 import Data.Functor
+import Data.Map.Merge.Strict
 import qualified Data.Map.Strict as Map
 import Data.Maybe
 import qualified Data.Monoid
@@ -129,6 +136,9 @@ toUn (Moded _ x) = Moded Unrestricted x
 
 getMode :: Moded a -> Mode
 getMode (Moded m _) = m
+
+fromModed :: Moded a -> a
+fromModed (Moded _ x) = x
 
 newtype Label = Label T.Text
   deriving (Eq, Ord, Show, Pretty, IsString)
@@ -282,6 +292,12 @@ data Type
 delta :: Binder -> Int
 delta Index    = 1
 delta (Bind _) = 0
+
+tvar :: Int -> Type
+tvar = TVar . variable
+
+(@@) :: Type -> Type -> Type
+(@@) = TApp
 
 instance Shift Type where
   shiftAbove c d (Forall b k ty) = Forall b k $ shiftAbove (c + delta b) d ty
@@ -470,7 +486,12 @@ data KindError
   | UnboundTypeVariable Variable
   | UnusedTypeVariables (Set.Set Variable) CTEnv
   | KindMismatch Type Type Kind Kind CTEnv
+  | ModedKindMismatch MKind MKind CTEnv
   | NotHigherKind Type Type CTEnv
+  | StructurallyInequivalent Type Type CTEnv
+  | MissingLabelL Label (Record MType) (Record MType) CTEnv
+  | MissingLabelR Label (Record MType) (Record MType) CTEnv
+  | ModeMismatch Mode Mode Type Type CTEnv
   deriving (Eq, Show)
 
 type WithTEnvError r = Members '[State TEnv, Error KindError] r
@@ -583,8 +604,8 @@ push k = modify f
   where
     f tenv = tenv { itenv = k : itenv tenv }
 
-pop :: WithTEnvError r => Mode -> Eff r ()
-pop m = do
+pop :: WithTEnvError r => Eff r ()
+pop = do
   tenv <- gets itenv
   (x, xs) <- uncons tenv
   modify $ replaceITEnv xs
@@ -596,7 +617,7 @@ withTypeBinding :: WithTEnvError r => Binder -> MKind -> Eff r a -> Eff r a
 withTypeBinding Index k e = do
   push k
   x <- e
-  pop $ getMode k
+  pop
   return x
 withTypeBinding (Bind n) k e = do
   old <- insert n k
@@ -696,3 +717,55 @@ reduce' :: Member (Reader EqEnv) r => Type -> Type -> Eff r Type
 reduce' (TAbs Index _ ty1) ty2        = reduce $ substTop ty2 ty1
 reduce' ty1 @ (TAbs (Bind n) _ _) ty2 = reduce' (localize ty1) ty2
 reduce' ty1 ty2                       = return $ TApp ty1 ty2
+
+strEquiv :: (WithTEnvError r, Member (Reader EqEnv) r) => Type -> Type -> Eff r Kind
+strEquiv ty1 @ (TVar v1) ty2 @ (TVar v2)
+  | v1 == v2  = fromModed <$> kindOf v1
+  | otherwise = throw $ StructurallyInequivalent ty1 ty2
+strEquiv (TFun ty11 ty12) (TFun ty21 ty22) = do
+  equal ty11 ty21 Type
+  equal ty12 ty22 Type
+  return Type
+strEquiv (TRecord r1 @ (Record m1)) (TRecord r2 @ (Record m2)) = do
+  let f l _ = throw $ MissingLabelL l r1 r2
+  let g l _ = throw $ MissingLabelR l r1 r2
+  let h _ ty1 ty2 = equal ty1 ty2 Type
+  _ <- mergeA (traverseMissing f) (traverseMissing g) (zipWithAMatched h) m1 m2
+  return Type
+strEquiv (Forall Index k1 ty1) (Forall Index k2 ty2)
+  | k1 == k2  = push (toUn k1) >> equal ty1 ty2 Type $> Type <* pop
+  | otherwise = throw $ ModedKindMismatch k1 k2
+strEquiv (Some Index k1 ty1) (Some Index k2 ty2)
+  | k1 == k2  = push (toUn k1) >> equal ty1 ty2 Type $> Type <* pop
+  | otherwise = throw $ ModedKindMismatch k1 k2
+strEquiv ty1 @ (Forall _ _ _) ty2 @ (Forall _ _ _) = strEquiv (localize ty1) (localize ty2)
+strEquiv ty1 @ (Some _ _ _) ty2 @ (Some _ _ _)     = strEquiv (localize ty1) (localize ty2)
+strEquiv (TApp ty11 ty12) (TApp ty21 ty22) = do
+  k <- strEquiv ty11 ty21
+  case k of
+    KFun k1 k2 -> do
+      equal ty12 ty22 k1
+      return k2
+    Type -> error $ "unexpected 'type' kind, which is kind of " ++ show ty11
+strEquiv (Ref ty1) (Ref ty2) = strEquiv ty1 ty2
+strEquiv ty1 ty2             = throw $ StructurallyInequivalent ty1 ty2
+
+class BetaEtaEq a where
+  equal :: (WithTEnvError r, Member (Reader EqEnv) r) => a -> a -> Kind -> Eff r ()
+
+instance BetaEtaEq Type where
+  -- Assumes well-kindness of input types.
+  equal ty1 ty2 Type         = void $ join $ strEquiv <$> reduce ty1 <*> reduce ty2
+  equal ty1 ty2 (KFun k1 k2) = do
+    push $ un k1
+    equal (shift 1 ty1 @@ tvar 0) (shift 1 ty2 @@ tvar 0) k2
+    pop
+
+instance BetaEtaEq MType where
+  equal (Moded m1 ty1) (Moded m2 ty2) k
+    | m1 == m2  = equal ty1 ty2 k
+    | otherwise = throw $ ModeMismatch m1 m2 ty1 ty2
+
+-- Assumes input types have the 'type' kind.
+equalType :: Type -> Type -> Either KindError ()
+equalType ty1 ty2 = run $ runError $ runReader emptyEqEnv $ evalState emptyTEnv $ equal ty1 ty2 Type
